@@ -1,5 +1,5 @@
 // CONFIG
-const baseUrl = ""; // change to "/api" if needed
+const baseUrl = ""; // set to "/api" ONLY if your API is actually under that prefix
 document.getElementById("baseUrlDisplay").textContent = baseUrl || "/";
 
 async function callApi(path, options = {}) {
@@ -18,6 +18,9 @@ function pretty(obj) {
   return JSON.stringify(obj, null, 2);
 }
 
+// Keep last case id in memory so search can work without manual entry
+let lastCaseId = "";
+
 // INGEST
 const ingestBtn = document.getElementById("ingestBtn");
 ingestBtn.addEventListener("click", async () => {
@@ -26,12 +29,18 @@ ingestBtn.addEventListener("click", async () => {
   const status = document.getElementById("ingestStatus");
   const result = document.getElementById("ingestResult");
 
-  if (!text) return status.textContent = "Enter text.";
+  if (!text) {
+    status.textContent = "Enter text.";
+    return;
+  }
 
   let metadata;
   if (metadataRaw) {
     try { metadata = JSON.parse(metadataRaw); }
-    catch { return status.textContent = "Invalid metadata JSON."; }
+    catch {
+      status.textContent = "Invalid metadata JSON.";
+      return;
+    }
   }
 
   ingestBtn.disabled = true;
@@ -42,6 +51,7 @@ ingestBtn.addEventListener("click", async () => {
     const body = { text };
     if (metadata) body.metadata = metadata;
 
+    // JSON ingest endpoint; backend will generate a case_id if absent
     const res = await callApi("/ingest", {
       method: "POST",
       body: JSON.stringify(body)
@@ -49,8 +59,15 @@ ingestBtn.addEventListener("click", async () => {
 
     status.textContent = "Ingest OK.";
     result.textContent = pretty(res);
+
+    // Capture and display the case_id for subsequent searches
+    if (res && res.case_id) {
+      lastCaseId = res.case_id;
+      const caseInput = document.getElementById("caseId");
+      if (caseInput) caseInput.value = res.case_id;
+    }
   } catch (err) {
-    status.textContent = `Error: ${err.status}`;
+    status.textContent = `Error: ${err.status ?? "?"}`;
     result.textContent = pretty(err.body);
   } finally {
     ingestBtn.disabled = false;
@@ -68,20 +85,32 @@ document.getElementById("ingestClearBtn").addEventListener("click", () => {
 const searchBtn = document.getElementById("searchBtn");
 searchBtn.addEventListener("click", async () => {
   const query = document.getElementById("searchQuery").value.trim();
-  const top_k = parseInt(document.getElementById("searchTopK").value || "5");
+  const top_k = parseInt(document.getElementById("searchTopK").value || "5", 10);
   const include_metadata = document.getElementById("searchIncludeMeta").checked;
 
   const status = document.getElementById("searchStatus");
   const result = document.getElementById("searchResult");
+  const caseInput = document.getElementById("caseId");
 
-  if (!query) return status.textContent = "Enter query.";
+  const case_id = (caseInput && caseInput.value.trim()) || lastCaseId;
+
+  if (!query) {
+    status.textContent = "Enter query.";
+    return;
+  }
+  if (!case_id) {
+    status.textContent = "Missing case_id: ingest text first or enter a case id.";
+    return;
+  }
 
   searchBtn.disabled = true;
   status.textContent = "Searching...";
   result.textContent = "{}";
 
   try {
-    const body = { query, top_k, include_metadata };
+    // Backend ignores include_metadata in our current model, but it's harmless to include.
+    const body = { case_id, query, top_k, include_metadata };
+
     const res = await callApi("/search", {
       method: "POST",
       body: JSON.stringify(body)
@@ -90,7 +119,7 @@ searchBtn.addEventListener("click", async () => {
     status.textContent = "Search OK.";
     result.textContent = pretty(res);
   } catch (err) {
-    status.textContent = `Error: ${err.status}`;
+    status.textContent = `Error: ${err.status ?? "?"}`;
     result.textContent = pretty(err.body);
   } finally {
     searchBtn.disabled = false;

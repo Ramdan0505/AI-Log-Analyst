@@ -16,6 +16,10 @@ services:
       - "8001:8000"
     volumes:
       - ./chroma:/data
+    environment:
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+
 
   minio:
     image: minio/minio

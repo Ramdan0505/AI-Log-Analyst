@@ -6,14 +6,28 @@ venv/
 __pycache__/
 *.pyc
 
-# OS files
+# Logs
+logs/
+*.log
+
+# Editor junk
+.vscode/
+.idea/
+
+# OS
 .DS_Store
 Thumbs.db
 
-# Editor junk
-.idea/
-.vscode/
+# ChromaDB local persistence
+chroma/
+*.sqlite3
 
-# Docker artifacts
+# MinIO buckets & metadata
+minio/
+
+# Docker
 *.pid
-logs/
+
+# Node / frontend artifacts (if needed later)
+node_modules/
+dist/

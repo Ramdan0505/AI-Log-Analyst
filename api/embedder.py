@@ -1,19 +1,19 @@
 from typing import List, Dict, Any
+import os
 
 from sentence_transformers import SentenceTransformer
 import chromadb
-from chromadb.config import Settings
 
 # Simple global singleton – fine for this use
 _model = SentenceTransformer("all-MiniLM-L6-v2")
 
-_client = chromadb.Client(
-    Settings(
-        chroma_api_impl="rest",
-        chroma_server_host="chroma",
-        chroma_server_http_port=8000,
-    )
-)
+CHROMA_HOST = os.getenv("CHROMA_HOST", "chroma")   # docker-compose service name
+CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
+try:
+     _client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+except Exception as e:
+     print(f"[embedder] HttpClient failed ({e}); falling back to local PersistentClient at /data")
+     _client = chromadb.PersistentClient(path="/data")
 
 
 def _get_collection(case_id: str):
