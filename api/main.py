@@ -19,6 +19,10 @@ from api.embedder import semantic_search, embed_texts
 # App (create FIRST), then middleware, then static mount
 # -----------------------------------------------------------------------------
 app = FastAPI(title="Pre-Investigation DFIR Agent")
+# Serve static UI files
+static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 
 app.add_middleware(
     CORSMiddleware,
