@@ -108,6 +108,11 @@ def ingest_text(req: IngestTextRequest):
 # -----------------------------------------------------------------------------
 # Search – GET (original) and POST (UI-friendly)
 # -----------------------------------------------------------------------------
+@app.get("/", response_class=HTMLResponse)
+async def serve_ui():
+    with open(os.path.join(static_dir, "rag_console.html"), "r", encoding="utf-8") as f:
+        return f.read()
+
 @app.get("/search")
 def search_get(
     case_id: str = Query(..., description="Case ID"),
