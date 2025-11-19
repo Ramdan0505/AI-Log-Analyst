@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from embedder import semantic_search, embed_texts  # ensure api/embedder.py provides both
+from api.embedder import semantic_search, embed_texts
 
 # -----------------------------------------------------------------------------
 # App (create FIRST), then middleware, then static mount
