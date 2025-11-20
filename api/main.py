@@ -108,4 +108,7 @@ class SearchRequest(BaseModel):
 @app.post("/search")
 def search_post(req: SearchRequest):
     try:
-        return s
+        return semantic_search(req.case_id, req.query, top_k=req.top_k)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
