@@ -81,10 +81,14 @@ class IngestTextRequest(BaseModel):
 def ingest_text(req: IngestTextRequest):
     case_id = req.case_id or str(uuid.uuid4())
     try:
-        embed_texts(case_id, [req.text], [req.metadata or {}])
+        # Ensure metadata is always a non-empty dict
+        metadata = req.metadata or {"source": "ui"}
+
+        embed_texts(case_id, [req.text], [metadata])
         return {"status": "ok", "case_id": case_id, "ingested": 1}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 
 # ------------ Search --------------
