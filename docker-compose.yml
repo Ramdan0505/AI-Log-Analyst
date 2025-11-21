@@ -11,10 +11,8 @@ services:
     environment:
       ARTIFACT_DIR: /data/artifacts
     depends_on:
-      chroma:
-        condition: service_healthy
-      worker:
-        condition: service_started
+      - chroma
+      - worker
     restart: always
 
   worker:
@@ -24,8 +22,7 @@ services:
     volumes:
       - ./data:/data
     depends_on:
-      chroma:
-        condition: service_healthy
+      - chroma
     restart: always
 
   chroma:
@@ -34,11 +31,6 @@ services:
       - "8001:8000"
     volumes:
       - ./chroma:/data
-    healthcheck:
-      test: ["CMD-SHELL", "echo > /dev/tcp/localhost/8000"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
     restart: always
 
   minio:
