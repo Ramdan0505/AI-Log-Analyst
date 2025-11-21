@@ -35,10 +35,10 @@ services:
     volumes:
       - ./chroma:/data
     healthcheck:
-      test: ["CMD-SHELL", "python3 - << 'EOF'\nimport requests; requests.get('http://localhost:8000/api/v1/heartbeat').raise_for_status()\nEOF"]
+      test: ["CMD-SHELL", "echo > /dev/tcp/localhost/8000"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 30
     restart: always
 
   minio:
