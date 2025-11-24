@@ -1,18 +1,19 @@
 import os
+import sys
 import requests
 import shutil
 import hashlib
 import uuid
 import subprocess
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from fastapi import Body
-from fastapi import FastAPI, UploadFile, BackgroundTasks, Query
+from fastapi import Body, FastAPI, UploadFile, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pathlib import Path
 
 from api.embedder import semantic_search, embed_texts
 
@@ -31,11 +32,16 @@ app.add_middleware(
 )
 
 ARTIFACT_DIR = os.environ.get("ARTIFACT_DIR", "/data/artifacts")
+os.makedirs(ARTIFACT_DIR, exist_ok=True)
+
 
 # HELPERS
-def save_upload(file: UploadFile, target_path: str):
+def save_upload(file: UploadFile, target_path: str) -> None:
+    # Ensure parent directory exists
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
     with open(target_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
+
 
 def hash_file(path: str) -> str:
     h = hashlib.sha256()
@@ -44,9 +50,11 @@ def hash_file(path: str) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def kick_extract_task(image_path: str, case_id: str):
+
+def kick_extract_task(image_path: str, case_id: str) -> None:
+    # Use the same Python interpreter as the FastAPI process
     subprocess.Popen(
-        ["python", "/app/worker/extract_job.py", image_path, case_id],
+        [sys.executable, "/app/worker/extract_job.py", image_path, case_id],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -63,12 +71,13 @@ async def ingest_image(file: UploadFile, background_tasks: BackgroundTasks):
     save_upload(file, image_path)
     sha = hash_file(image_path)
 
+    ingest_meta = {
+        "case_id": case_id,
+        "filename": file.filename,
+        "sha256": sha,
+    }
     with open(os.path.join(dest_dir, "ingest.json"), "w", encoding="utf-8") as m:
-        m.write(json.dumps({
-            "case_id": case_id,
-            "filename": file.filename,
-            "sha256": sha
-        }))
+        json.dump(ingest_meta, m, ensure_ascii=False, indent=2)
 
     background_tasks.add_task(kick_extract_task, image_path, case_id)
     return {"case_id": case_id, "filename": file.filename, "sha256": sha}
@@ -89,7 +98,10 @@ def ingest_text(body: Dict[str, Any] = Body(...)):
             content={"error": "Missing 'text' in request body."},
         )
 
-    case_id = (body.get("case_id") or str(uuid.uuid4())).strip() or str(uuid.uuid4())
+    # Allow client-provided case_id but fall back to a new UUID
+    raw_case_id = (body.get("case_id") or "").strip()
+    case_id = raw_case_id or str(uuid.uuid4())
+
     metadata = body.get("metadata") or {"source": "ui"}
 
     try:
@@ -99,12 +111,20 @@ def ingest_text(body: Dict[str, Any] = Body(...)):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-# SEARCH
+# ROOT UI
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
-    with open(os.path.join(static_dir, "rag_console.html"), "r", encoding="utf-8") as f:
+    ui_path = os.path.join(static_dir, "rag_console.html")
+    if not os.path.exists(ui_path):
+        return HTMLResponse(
+            content="<h1>UI not found</h1><p>rag_console.html is missing.</p>",
+            status_code=500,
+        )
+    with open(ui_path, "r", encoding="utf-8") as f:
         return f.read()
 
+
+# SEARCH
 @app.get("/search")
 def search_get(case_id: str, q: str, top_k: int = 5):
     try:
@@ -112,10 +132,12 @@ def search_get(case_id: str, q: str, top_k: int = 5):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+
 class SearchRequest(BaseModel):
     case_id: str
     query: str
     top_k: int = 5
+
 
 @app.post("/search")
 def search_post(req: SearchRequest):
@@ -129,16 +151,23 @@ def search_post(req: SearchRequest):
 @app.get("/cases")
 def list_cases():
     base = ARTIFACT_DIR
+    if not os.path.isdir(base):
+        # If artifacts dir doesn't exist yet, return empty list
+        return {"cases": []}
+
     try:
         cases = []
         for cid in os.listdir(base):
             path = os.path.join(base, cid)
             if os.path.isdir(path):
                 meta_file = os.path.join(path, "ingest.json")
-                metadata = {}
+                metadata: Dict[str, Any] = {}
                 if os.path.exists(meta_file):
-                    with open(meta_file, "r") as f:
-                        metadata = json.load(f)
+                    try:
+                        with open(meta_file, "r", encoding="utf-8") as f:
+                            metadata = json.load(f)
+                    except Exception:
+                        metadata = {}
                 cases.append({"case_id": cid, "metadata": metadata})
         return {"cases": cases}
     except Exception as e:
@@ -148,48 +177,79 @@ def list_cases():
 # CASE VIEWER — CASE DETAILS
 @app.get("/cases/{case_id}")
 def get_case(case_id: str):
-    path = os.path.join(ARTIFACT_DIR, case_id)
-    if not os.path.isdir(path):
+    # Sanitize case_id usage on filesystem
+    case_dir = Path(ARTIFACT_DIR) / case_id
+    if not case_dir.is_dir():
         return JSONResponse(status_code=404, content={"error": "Case not found"})
 
-    def load_file(p, default=None):
-        return json.load(open(p)) if os.path.exists(p) else default
+    def load_file(p: Path, default=None):
+        if not p.exists():
+            return default
+        try:
+            with p.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default
 
     details = {
         "case_id": case_id,
-        "ingest": load_file(os.path.join(path, "ingest.json")),
-        "triage_findings": load_file(os.path.join(path, "triage_findings.json")),
-        "triage_topn": load_file(os.path.join(path, "triage_topn.json")),
+        "ingest": load_file(case_dir / "ingest.json"),
+        "triage_findings": load_file(case_dir / "triage_findings.json"),
+        "triage_topn": load_file(case_dir / "triage_topn.json"),
         "registry_summaries": [],
         "evtx_summaries": [],
         "playbook": "",
     }
 
-    reg_path = os.path.join(path, "registry_summaries.jsonl")
-    if os.path.exists(reg_path):
-        with open(reg_path, "r") as f:
-            details["registry_summaries"] = f.read().splitlines()
+    reg_path = case_dir / "registry_summaries.jsonl"
+    if reg_path.exists():
+        try:
+            with reg_path.open("r", encoding="utf-8") as f:
+                details["registry_summaries"] = f.read().splitlines()
+        except Exception:
+            details["registry_summaries"] = []
 
-    evtx_path = os.path.join(path, "evtx_summaries.jsonl")
-    if os.path.exists(evtx_path):
-        with open(evtx_path, "r") as f:
-            details["evtx_summaries"] = f.read().splitlines()
+    evtx_path = case_dir / "evtx_summaries.jsonl"
+    if evtx_path.exists():
+        try:
+            with evtx_path.open("r", encoding="utf-8") as f:
+                details["evtx_summaries"] = f.read().splitlines()
+        except Exception:
+            details["evtx_summaries"] = []
 
-    playbook_path = os.path.join(path, "playbook.md")
-    if os.path.exists(playbook_path):
-        with open(playbook_path, "r") as f:
-            details["playbook"] = f.read()
+    playbook_path = case_dir / "playbook.md"
+    if playbook_path.exists():
+        try:
+            with playbook_path.open("r", encoding="utf-8") as f:
+                details["playbook"] = f.read()
+        except Exception:
+            details["playbook"] = ""
 
     return details
 
 
-# CASE VIEWER — DOWNLOAD
+# CASE VIEWER — DOWNLOAD (Hardened)
 @app.get("/cases/{case_id}/download/{filename}")
 def download_artifact(case_id: str, filename: str):
-    path = os.path.join(ARTIFACT_DIR, case_id, filename)
-    if not os.path.exists(path):
+    base_dir = Path(ARTIFACT_DIR).resolve()
+    case_dir = (base_dir / case_id).resolve()
+
+    if not case_dir.is_dir():
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    # Prevent path traversal: only allow basename
+    safe_name = os.path.basename(filename)
+    candidate = (case_dir / safe_name).resolve()
+
+    # Ensure candidate is inside the case directory
+    if not str(candidate).startswith(str(case_dir)):
+        return JSONResponse(status_code=400, content={"error": "Invalid filename"})
+
+    if not candidate.exists():
         return JSONResponse(status_code=404, content={"error": "File not found"})
-    return FileResponse(path, filename=filename)
+
+    return FileResponse(str(candidate), filename=safe_name)
+
 
 # ---------------------------------------------------
 # AI Explain Case  (using Ollama)
@@ -199,19 +259,20 @@ def explain_case_ollama(body: Dict[str, Any] = Body(...)):
     if not case_id:
         return JSONResponse(status_code=400, content={"error": "Missing case_id"})
 
-    case_path = os.path.join(ARTIFACT_DIR, case_id)
-    if not os.path.isdir(case_path):
+    case_path = Path(ARTIFACT_DIR) / case_id
+    if not case_path.is_dir():
         return JSONResponse(status_code=404, content={"error": "Case not found"})
 
     # Helper to read text files safely
-    def read_text(name):
-        path = os.path.join(case_path, name)
-        if os.path.exists(path):
-            try:
-                return open(path, "r", encoding="utf-8").read()
-            except:
-                return ""
-        return ""
+    def read_text(name: str) -> str:
+        p = case_path / name
+        if not p.exists():
+            return ""
+        try:
+            with p.open("r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            return ""
 
     ingest = read_text("ingest.json")
     triage_findings = read_text("triage_findings.json")
@@ -261,7 +322,7 @@ Your report MUST include:
         resp = requests.post(
             "http://host.docker.internal:11434/api/chat",
             json={
-                "model": "llama3",  # or qwen2.5, llama3.1, phi3, etc.
+                "model": "llama3",  # adjust model name as needed
                 "messages": [
                     {"role": "system", "content": "You are a professional DFIR analyst."},
                     {"role": "user", "content": prompt},
@@ -277,9 +338,17 @@ Your report MUST include:
             content={"error": f"Ollama request failed: {str(e)}"},
         )
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Ollama returned non-JSON response"},
+        )
 
-    summary = data.get("message", {}).get("content", "").strip()
+    summary = (data.get("message") or {}).get("content", "") or ""
+    summary = summary.strip()
+
     if not summary:
         return JSONResponse(
             status_code=500,
@@ -287,4 +356,3 @@ Your report MUST include:
         )
 
     return {"case_id": case_id, "summary": summary}
-
