@@ -1,5 +1,5 @@
 // CONFIG
-const baseUrl = "";
+const baseUrl = "";  // same-origin (http://127.0.0.1:8080)
 document.getElementById("baseUrlDisplay").textContent = baseUrl || "/";
 
 async function callApi(path, options = {}) {
@@ -20,7 +20,7 @@ function pretty(obj) {
 
 let lastCaseId = "";
 
-// INGEST
+// ---------------- TEXT INGEST ----------------
 const ingestBtn = document.getElementById("ingestBtn");
 ingestBtn.addEventListener("click", async () => {
   const text = document.getElementById("ingestText").value.trim();
@@ -73,7 +73,57 @@ document.getElementById("ingestClearBtn").addEventListener("click", () => {
   document.getElementById("ingestResult").textContent = "{}";
 });
 
-// SEARCH
+// ---------------- FILE INGEST (/ingest_file) ----------------
+const ingestFileInput = document.getElementById("ingestFile");
+const ingestFileBtn = document.getElementById("ingestFileBtn");
+const ingestFileStatus = document.getElementById("ingestFileStatus");
+const ingestFileResult = document.getElementById("ingestFileResult");
+
+ingestFileBtn.addEventListener("click", async () => {
+  const file = ingestFileInput.files[0];
+  ingestFileStatus.textContent = "";
+  ingestFileResult.textContent = "{}";
+
+  if (!file) {
+    ingestFileStatus.textContent = "Choose a file first.";
+    return;
+  }
+
+  const form = new FormData();
+  form.append("file", file);
+
+  ingestFileBtn.disabled = true;
+  ingestFileStatus.textContent = "Uploading & ingesting file...";
+  try {
+    const resp = await fetch(baseUrl + "/ingest_file", {
+      method: "POST",
+      body: form      // IMPORTANT: do NOT set Content-Type; browser sets multipart boundary
+    });
+
+    const text = await resp.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = text; }
+
+    if (!resp.ok) {
+      throw { status: resp.status, body: data };
+    }
+
+    ingestFileStatus.textContent = "File ingest OK.";
+    ingestFileResult.textContent = pretty(data);
+
+    // if backend returned a case_id, remember it so search/case viewer can use it
+    if (data && data.case_id) {
+      lastCaseId = data.case_id;
+    }
+  } catch (err) {
+    ingestFileStatus.textContent = `Error: ${err.status ?? "?"}`;
+    ingestFileResult.textContent = pretty(err.body ?? err);
+  } finally {
+    ingestFileBtn.disabled = false;
+  }
+});
+
+// ---------------- SEARCH ----------------
 const searchBtn = document.getElementById("searchBtn");
 searchBtn.addEventListener("click", async () => {
   const query = document.getElementById("searchQuery").value.trim();
@@ -90,7 +140,7 @@ searchBtn.addEventListener("click", async () => {
     return;
   }
   if (!case_id) {
-    status.textContent = "Missing case_id: ingest first.";
+    status.textContent = "Missing case_id: ingest first (text or file).";
     return;
   }
 
@@ -121,7 +171,7 @@ document.getElementById("searchClearBtn").addEventListener("click", () => {
   document.getElementById("searchStatus").textContent = "";
 });
 
-// CASE VIEWER
+// ---------------- CASE VIEWER ----------------
 const loadCasesBtn = document.getElementById("loadCasesBtn");
 const caseListDisplay = document.getElementById("caseListDisplay");
 const caseDetails = document.getElementById("caseDetails");
