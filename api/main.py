@@ -356,3 +356,79 @@ Your report MUST include:
         )
 
     return {"case_id": case_id, "summary": summary}
+
+# ---------------------------------------------------
+# MITRE ATT&CK tagging using Ollama + existing summary
+# ---------------------------------------------------
+@app.post("/mitre_tags")
+def mitre_tags(body: Dict[str, Any] = Body(...)):
+    case_id = body.get("case_id")
+    summary = (body.get("summary") or "").strip()
+
+    if not case_id:
+        return JSONResponse(status_code=400, content={"error": "Missing case_id"})
+    if not summary:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Missing 'summary' in request body; run Explain Case first."},
+        )
+
+    prompt = f"""
+You are a DFIR analyst who knows the MITRE ATT&CK framework.
+
+Given the following incident summary, extract the MITRE ATT&CK techniques that are clearly evidenced.
+Only include techniques that are reasonably supported by the summary.
+
+CASE ID: {case_id}
+
+INCIDENT SUMMARY:
+\"\"\"{summary}\"\"\"
+
+
+Return your answer as pure JSON ONLY, no commentary, in the following format:
+
+[
+  {{
+    "technique_id": "TXXXX",
+    "name": "Technique Name",
+    "tactic": "Tactic name (e.g., Privilege Escalation, Persistence)",
+    "justification": "1–3 sentences explaining why this technique applies."
+  }},
+  ...
+]
+
+If there are no clear techniques, return [].
+"""
+
+    try:
+        resp = requests.post(
+            "http://host.docker.internal:11434/api/chat",
+            json={
+                "model": "llama3",
+                "messages": [
+                    {"role": "system", "content": "You are a professional DFIR analyst and MITRE ATT&CK expert."},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+            },
+            timeout=180,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Ollama MITRE request failed: {str(e)}"},
+        )
+
+    data = resp.json()
+    text = (data.get("message", {}) or {}).get("content", "").strip()
+
+    # Try to parse JSON; if model didn't obey strictly, return raw text
+    tags: Any
+    try:
+        tags = json.loads(text)
+    except Exception:
+        tags = {"raw": text}
+
+    return {"case_id": case_id, "tags": tags}
+
