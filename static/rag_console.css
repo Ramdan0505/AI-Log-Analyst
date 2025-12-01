@@ -139,3 +139,17 @@ pre {
   line-height: 1.4;
 }
 
+#mitreResult {
+  margin-top: 0.25rem;
+  height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  background: #020617;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+
