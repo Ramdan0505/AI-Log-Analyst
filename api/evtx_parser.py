@@ -7,6 +7,10 @@ from typing import Dict, Any, Generator, List, Optional
 
 from Evtx.Evtx import Evtx
 
+evtx_path = r"C:\temp\test_security.evtx"
+case_dir = r"C:\temp\test_case_evtx"
+
+
 # Core DFIR-relevant Event IDs to keep the noise down
 INTERESTING_EVENT_IDS = {
     4624,  # Logon
