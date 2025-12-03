@@ -4,6 +4,7 @@ import os
 from typing import List, Dict, Any
 
 from api.evtx_parser import generate_evtx_derivatives
+from api.registry_parser import generate_registry_derivatives
 from api.embedder import embed_texts
 
 TEXT_EXTENSIONS = {".txt", ".log", ".json", ".csv", ".md"}
