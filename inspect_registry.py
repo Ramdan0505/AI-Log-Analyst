@@ -1,13 +1,14 @@
 # inspect_registry.py
-import os
 from regipy.registry import RegistryHive
 
+# Path to the SOFTWARE hive you exported
 HIVE_PATH = r"C:\data\radlab_artifacts\test_case_evtx\SOFTWARE.hiv"
 
-def list_keys_with_values(root_key_path: str, max_keys: int = 50):
+
+def list_keys_with_values(root_key_path: str, max_keys: int = 30):
     """
-    Walks a key and prints subkeys that actually have values.
-    Helps you discover the exact paths to use in REGISTRY_TARGETS.
+    Walk a key and print subkeys that actually have values.
+    This shows the exact key paths we should use in REGISTRY_TARGETS.
     """
     hive = RegistryHive(HIVE_PATH)
 
@@ -34,7 +35,8 @@ def list_keys_with_values(root_key_path: str, max_keys: int = 50):
 
     while stack and seen < max_keys:
         k = stack.pop()
-        # keys that actually have values
+
+        # If this key has values, print them
         if getattr(k, "values", []):
             print(f"\nKey: {k.path}")
             for v in k.values:
@@ -46,11 +48,14 @@ def list_keys_with_values(root_key_path: str, max_keys: int = 50):
                 print(f"  {name} = {value}")
             seen += 1
 
-        # dive into subkeys
-        for sub in k.iter_subkeys():
-            stack.append(sub)
+        # Add subkeys to the stack
+        try:
+            for sub in k.iter_subkeys():
+                stack.append(sub)
+        except Exception:
+            continue
 
 
 if __name__ == "__main__":
-    # Start from a high-value root; you can change this string to explore
-    list_keys_with_values(r"Microsoft\Windows NT\CurrentVersion", max_keys=30)
+    # You can change this root to explore other areas
+    list_keys_with_values(r"Microsoft\Windows NT\CurrentVersion", max_keys=20)
