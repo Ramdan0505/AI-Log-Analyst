@@ -152,6 +152,13 @@ def generate_registry_derivatives(hive_path: str, case_dir: str) -> Dict[str, An
       - artifacts/registry/<basename>.txt  : text summaries
     Returns basic stats.
     """
+
+    if hive_path.lower().endswith(".reg"):
+        events = parse_reg_file(hive_path)
+    else:
+        events = iter_registry_events(hive_path)
+
+
     events = iter_registry_events(hive_path)
     os.makedirs(case_dir, exist_ok=True)
     base = os.path.splitext(os.path.basename(hive_path))[0]
