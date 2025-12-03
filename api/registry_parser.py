@@ -176,3 +176,36 @@ def generate_registry_derivatives(hive_path: str, case_dir: str) -> Dict[str, An
         "jsonl_path": jsonl_path,
         "txt_path": txt_path,
     }
+
+def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
+    """
+    Very simple REG file parser for exported hives.
+    Extracts: key path, value name, value data.
+    """
+    events = []
+    current_key = None
+
+    with open(reg_path, "r", encoding="utf-16", errors="ignore") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("[") and line.endswith("]"):
+                current_key = line[1:-1]
+                continue
+
+            if "=" in line and current_key:
+                name, value = line.split("=", 1)
+                events.append(
+                    {
+                        "hive": "SOFTWARE.REG",
+                        "category": "reg_export",
+                        "key_path": current_key,
+                        "value_name": name,
+                        "value": value,
+                    }
+                )
+
+    return events
+
