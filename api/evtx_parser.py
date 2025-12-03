@@ -118,14 +118,21 @@ def iter_evtx_events(evtx_path: str) -> Generator[Dict[str, Any], None, None]:
                     value = d.text.strip() if d.text else ""
                     data[name] = value
 
-            yield {
-                "record_number": record.record_number(),
-                "event_id": event_id,
-                "timestamp": timestamp,
-                "computer": computer,
-                "channel": channel,
-                "data": data,
-            }
+                # Different versions of python-evtx use record_num or record_number
+    try:
+        rec_no = record.record_number()
+    except AttributeError:
+        rec_no = getattr(record, "record_num", None)
+
+    yield {
+        "record_number": rec_no,
+        "event_id": event_id,
+        "timestamp": timestamp,
+        "computer": computer,
+        "channel": channel,
+        "data": data,
+    }
+
 
 
 def format_event_for_text(event: Dict[str, Any]) -> str:
