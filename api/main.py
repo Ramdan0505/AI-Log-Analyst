@@ -251,6 +251,20 @@ def download_artifact(case_id: str, filename: str):
 
     return FileResponse(str(candidate), filename=safe_name)
 
+# CASE VIEWER — REINDEX (build semantic corpus from artifacts + EVTX)
+@app.post("/cases/{case_id}/reindex")
+def reindex_case(case_id: str):
+    case_dir = Path(ARTIFACT_DIR) / case_id
+    if not case_dir.is_dir():
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    try:
+        chunks = build_and_index_case_corpus(str(case_dir), case_id)
+        return {"case_id": case_id, "indexed_chunks": chunks}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 
 # ---------------------------------------------------
 # AI Explain Case  (using Ollama)
