@@ -8,12 +8,13 @@ from api.registry_parser import generate_registry_derivatives
 from api.embedder import embed_texts
 
 TEXT_EXTENSIONS = {".txt", ".log", ".json", ".csv", ".md"}
+REGISTRY_EXTENSIONS = {".dat", ".hiv", ".hive"}  # crude but effective
 
 
 def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
     """
-    Walk the case directory, convert EVTX → text, collect all text,
-    write EVTX summaries to evtx_summaries.jsonl, and push everything
+    Walk the case directory, convert EVTX + Registry → text, collect all text,
+    write EVTX and Registry summaries to JSONL, and push everything
     into Chroma via embed_texts().
 
     Returns number of text chunks indexed.
@@ -22,19 +23,22 @@ def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
     metadata_list: List[Dict[str, Any]] = []
 
     evtx_summary_path = os.path.join(case_dir, "evtx_summaries.jsonl")
+    reg_summary_path = os.path.join(case_dir, "registry_summaries.jsonl")
     evtx_summary_f = None
+    reg_summary_f = None
 
     try:
-        # Overwrite summaries on each reindex to avoid infinite growth
         evtx_summary_f = open(evtx_summary_path, "w", encoding="utf-8")
+        reg_summary_f = open(reg_summary_path, "w", encoding="utf-8")
 
         for root, _, files in os.walk(case_dir):
             for filename in files:
                 path = os.path.join(root, filename)
                 ext = os.path.splitext(filename)[1].lower()
                 rel_path = os.path.relpath(path, case_dir)
+                base_upper = os.path.basename(path).upper()
 
-                # 1) EVTX: parse and add summaries
+                # 1) EVTX files
                 if ext == ".evtx":
                     stats = generate_evtx_derivatives(path, case_dir)
                     print(f"[EVTX] {filename}: {stats['events_count']} events parsed")
@@ -44,7 +48,6 @@ def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
                             line = line.strip()
                             if not line:
                                 continue
-
                             text_chunks.append(line)
                             metadata_list.append(
                                 {
@@ -55,10 +58,39 @@ def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
                             )
                             evtx_summary_f.write(line + "\n")
 
-                # 2) Normal text-like files
+                # 2) Registry hives (NTUSER.DAT, SOFTWARE, SYSTEM, etc.)
+                elif (
+                    ext in REGISTRY_EXTENSIONS
+                    or base_upper.startswith("NTUSER")
+                    or base_upper.startswith("SOFTWARE")
+                    or base_upper.startswith("SYSTEM")
+                ):
+                    stats = generate_registry_derivatives(path, case_dir)
+                    if stats["events_count"] > 0:
+                        print(
+                            f"[REGISTRY] {filename}: {stats['events_count']} entries parsed"
+                        )
+                        with open(stats["txt_path"], "r", encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                text_chunks.append(line)
+                                metadata_list.append(
+                                    {
+                                        "source": "registry",
+                                        "case_id": case_id,
+                                        "file": rel_path,
+                                    }
+                                )
+                                reg_summary_f.write(line + "\n")
+
+                # 3) Normal text-like files
                 elif ext in TEXT_EXTENSIONS:
                     try:
-                        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        with open(
+                            path, "r", encoding="utf-8", errors="ignore"
+                        ) as f:
                             content = f.read()
                     except (UnicodeDecodeError, OSError):
                         continue
@@ -75,10 +107,10 @@ def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
     finally:
         if evtx_summary_f is not None:
             evtx_summary_f.close()
+        if reg_summary_f is not None:
+            reg_summary_f.close()
 
     if text_chunks:
-        # Your embed_texts expects (case_id, texts, metadata_list)
         embed_texts(case_id, text_chunks, metadata_list)
 
     return len(text_chunks)
-
