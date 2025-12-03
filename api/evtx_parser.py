@@ -118,21 +118,8 @@ def iter_evtx_events(evtx_path: str) -> Generator[Dict[str, Any], None, None]:
                     value = d.text.strip() if d.text else ""
                     data[name] = value
 
-          # Different versions of python-evtx use record_num or record_number
-    try:
-        rec_no = record.record_number()
-    except AttributeError:
-        rec_attr = getattr(record, "record_num", None)
-        if callable(rec_attr):
-            rec_no = rec_attr()
-        else:
-            rec_no = rec_attr
-
-    try:
-        if rec_no is not None:
-            rec_no = int(rec_no)
-    except (ValueError, TypeError):
-        pass
+        # We skip record number for now to avoid python-evtx incompatibilities
+    rec_no = None
 
     yield {
         "record_number": rec_no,
@@ -142,6 +129,7 @@ def iter_evtx_events(evtx_path: str) -> Generator[Dict[str, Any], None, None]:
         "channel": channel,
         "data": data,
     }
+
 
 
 
