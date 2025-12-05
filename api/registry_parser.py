@@ -14,38 +14,37 @@ from regipy.exceptions import RegistryKeyNotFoundException
 
 REGISTRY_TARGETS: Dict[str, List[Dict[str, str]]] = {
     "NTUSER.DAT": [
-        {
-            "key": r"Software\Microsoft\Windows\CurrentVersion\Run",
-            "category": "persistence_run",
-        },
-        {
-            "key": r"Software\Microsoft\Windows\CurrentVersion\RunOnce",
-            "category": "persistence_run_once",
-        },
+        # User persistence
+        {"key": r"Software\Microsoft\Windows\CurrentVersion\Run", "category": "user_persistence_run"},
+        {"key": r"Software\Microsoft\Windows\CurrentVersion\RunOnce", "category": "user_persistence_runonce"},
+
+        # User activity
+        {"key": r"Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths", "category": "typed_paths"},
+        {"key": r"Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU", "category": "run_mru"},
+        {"key": r"Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs", "category": "recent_docs"},
     ],
+
     "SOFTWARE": [
-        {
-            # OS version & build info
-            "key": r"Microsoft\Windows NT\CurrentVersion",
-            "category": "os_version",
-        },
-        {
-            # May or may not be populated, but good DFIR target
-            "key": r"Microsoft\Windows\CurrentVersion\Run",
-            "category": "persistence_run",
-        },
-        {
-            "key": r"Microsoft\Windows\CurrentVersion\RunOnce",
-            "category": "persistence_run_once",
-        },
+        # OS metadata
+        {"key": r"Microsoft\Windows NT\CurrentVersion", "category": "os_metadata"},
+
+        # System persistence
+        {"key": r"Microsoft\Windows\CurrentVersion\Run", "category": "system_persistence_run"},
+        {"key": r"Microsoft\Windows\CurrentVersion\RunOnce", "category": "system_persistence_runonce"},
+
+        # Installed software (uninstall keys)
+        {"key": r"Microsoft\Windows\CurrentVersion\Uninstall", "category": "installed_software"},
     ],
+
     "SYSTEM": [
-        {
-            "key": r"ControlSet001\Services",
-            "category": "services",
-        },
+        # Services (persistence)
+        {"key": r"ControlSet001\Services", "category": "services"},
+
+        # Image File Execution Options (IFEO) — common malware abuse
+        {"key": r"ControlSet001\Control\Session Manager\Environment", "category": "session_env"},
     ],
 }
+
 
 
 # ---------------------------
