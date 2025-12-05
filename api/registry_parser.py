@@ -153,13 +153,42 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
     """
     Parse a REG file exported with `reg export`.
 
-    This is a simplified parser that:
-      - Tracks current key path [HIVE\\...]
+    This parser:
+      - Tracks the current key path [HKEY_...]
       - Extracts value name + raw string
-      - Keeps only keys whose path matches the SOFTWARE REGISTRY_TARGETS
+      - KEEPS ONLY high-value DFIR paths:
+          * HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion          (OS metadata)
+          * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run         (system persistence)
+          * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce     (system persistence)
+          * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall   (installed software)
     """
     events: List[Dict[str, Any]] = []
     current_key: Optional[str] = None
+
+    # Normalized prefixes (lowercased) for matching
+    os_meta_prefix = r"hkey_local_machine\software\microsoft\windows nt\currentversion"
+    run_prefix = r"hkey_local_machine\software\microsoft\windows\currentversion\run"
+    runonce_prefix = r"hkey_local_machine\software\microsoft\windows\currentversion\runonce"
+    uninstall_prefix = r"hkey_local_machine\software\microsoft\windows\currentversion\uninstall"
+
+    allowed_prefixes = [
+        os_meta_prefix,
+        run_prefix,
+        runonce_prefix,
+        uninstall_prefix,
+    ]
+
+    # For uninstall keys, only keep these value names
+    uninstall_value_whitelist = {
+        "displayname",
+        "displayicon",
+        "installlocation",
+        "publisher",
+        "installdate",
+        "uninstallstring",
+        "quietuninstallstring",
+        "displayversion",
+    }
 
     # reg export uses UTF-16 LE with BOM on modern Windows
     with open(reg_path, "r", encoding="utf-16", errors="ignore") as f:
@@ -180,6 +209,14 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
                 name_part = name_part.strip()
                 value_part = value_part.strip()
 
+                # Normalize key path for prefix matching
+                key_lower = current_key.lower()
+
+                # Filter on allowed root prefixes only
+                if not any(key_lower.startswith(p) for p in allowed_prefixes):
+                    continue
+
+                # Determine value name
                 if name_part == "@":
                     value_name = "(Default)"
                 elif name_part.startswith('"') and name_part.endswith('"'):
@@ -187,12 +224,12 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
                 else:
                     value_name = name_part
 
-                value = value_part  # raw value string
+                value = value_part  # raw registry value string
 
-                # Only keep entries whose key path matches our SOFTWARE targets
-                software_targets = REGISTRY_TARGETS.get("SOFTWARE", [])
-                if not any(t["key"] in current_key for t in software_targets):
-                    continue
+                # Additional filter for Uninstall keys: only keep important fields
+                if key_lower.startswith(uninstall_prefix):
+                    if value_name.lower() not in uninstall_value_whitelist:
+                        continue
 
                 events.append(
                     {
@@ -207,6 +244,7 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
                 )
 
     return events
+
 
 
 # ---------------------------
