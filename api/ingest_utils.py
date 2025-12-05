@@ -111,8 +111,16 @@ def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
         if reg_summary_f is not None:
             reg_summary_f.close()
 
-    if text_chunks:
-        # embed_texts(case_id, texts, metadata_list)
-        embed_texts(case_id, text_chunks, metadata_list)
+        if text_chunks:
+        # Batch to avoid exceeding embedder max batch size (5461)
+            max_batch = 5000  # stay safely under 5461
+            total = len(text_chunks)
+            for start in range(0, total, max_batch):
+                end = start + max_batch
+                batch_texts = text_chunks[start:end]
+                batch_meta = metadata_list[start:end]
+                print(f"[EMBED] case={case_id} batch={start}-{end-1} of {total}")
+                embed_texts(case_id, batch_texts, batch_meta)
 
-    return len(text_chunks)
+        return len(text_chunks)
+
