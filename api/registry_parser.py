@@ -2,14 +2,14 @@
 
 import os
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from regipy.registry import RegistryHive
 from regipy.exceptions import RegistryKeyNotFoundException
 
 
 # ---------------------------
-# CONFIG: which hive types + keys to look at
+# CONFIG: high-value DFIR areas
 # ---------------------------
 
 REGISTRY_TARGETS: Dict[str, List[Dict[str, str]]] = {
@@ -32,19 +32,18 @@ REGISTRY_TARGETS: Dict[str, List[Dict[str, str]]] = {
         {"key": r"Microsoft\Windows\CurrentVersion\Run", "category": "system_persistence_run"},
         {"key": r"Microsoft\Windows\CurrentVersion\RunOnce", "category": "system_persistence_runonce"},
 
-        # Installed software (uninstall keys)
+        # Installed software
         {"key": r"Microsoft\Windows\CurrentVersion\Uninstall", "category": "installed_software"},
     ],
 
     "SYSTEM": [
-        # Services (persistence)
+        # Services (persistence & execution)
         {"key": r"ControlSet001\Services", "category": "services"},
 
-        # Image File Execution Options (IFEO) — common malware abuse
+        # Session environment (can be abused)
         {"key": r"ControlSet001\Control\Session Manager\Environment", "category": "session_env"},
     ],
 }
-
 
 
 # ---------------------------
@@ -52,7 +51,7 @@ REGISTRY_TARGETS: Dict[str, List[Dict[str, str]]] = {
 # ---------------------------
 
 def detect_hive_name(hive_path: str) -> str:
-    """Rough classification based on filename."""
+    """Approximate hive type from filename."""
     base = os.path.basename(hive_path).upper()
     if base.startswith("NTUSER"):
         return "NTUSER.DAT"
@@ -69,13 +68,13 @@ def _extract_key_values(
     """
     Extract values from a specific key into normalized dicts.
 
-    We try both "Key\Path" and "\Key\Path" forms to handle regipy path quirks.
+    Tries both "Key\\Path" and "\\Key\\Path" forms to handle regipy path quirks.
     """
     candidates = [key_path]
     if not key_path.startswith("\\"):
         candidates.append("\\" + key_path)
 
-    key = None
+    key: Optional[Any] = None
     for kp in candidates:
         try:
             key = hive.get_key(kp)
@@ -88,7 +87,7 @@ def _extract_key_values(
     if key is None:
         return []
 
-    # Try a couple of common timestamp attributes
+    # Try common timestamp attributes
     ts = None
     for attr in ("last_written_timestamp", "timestamp"):
         try:
@@ -125,9 +124,8 @@ def iter_registry_events(hive_path: str) -> List[Dict[str, Any]]:
     """
     Extract DFIR-relevant entries from a binary hive into a list of dicts.
 
-    NOTE: On some newer Windows builds, regipy may return empty results
-    for hives saved with `reg save`. In that case, prefer exporting as
-    a .reg file and using parse_reg_file().
+    On newer Windows builds, hives saved with `reg save` may yield 0 events;
+    in that case prefer exporting as a .reg and using parse_reg_file().
     """
     hive_name = detect_hive_name(hive_path)
     targets = REGISTRY_TARGETS.get(hive_name, [])
@@ -154,24 +152,22 @@ def iter_registry_events(hive_path: str) -> List[Dict[str, Any]]:
 def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
     """
     Parse a REG file exported with `reg export`.
-    This is NOT a full REG parser; it just extracts:
-      - key path (e.g. HKEY_LOCAL_MACHINE\SOFTWARE\...)
-      - value name (@ for default)
-      - raw value string
 
-    It works well enough to feed semantic search and LLMs.
+    This is a simplified parser that:
+      - Tracks current key path [HIVE\\...]
+      - Extracts value name + raw string
+      - Keeps only keys whose path matches the SOFTWARE REGISTRY_TARGETS
     """
     events: List[Dict[str, Any]] = []
-    current_key: str | None = None
+    current_key: Optional[str] = None
 
-    # reg export on modern Windows uses UTF-16 LE with BOM
+    # reg export uses UTF-16 LE with BOM on modern Windows
     with open(reg_path, "r", encoding="utf-16", errors="ignore") as f:
         for raw_line in f:
             line = raw_line.strip()
             if not line:
                 continue
             if line.startswith(";"):
-                # comment
                 continue
 
             # Section header: [HKEY_LOCAL_MACHINE\SOFTWARE\...]
@@ -191,22 +187,24 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
                 else:
                     value_name = name_part
 
-                # Keep raw value string (e.g., "SomeValue", dword:00000001, hex:...)
-                value = value_part
+                value = value_part  # raw value string
 
-                # Only include categories whose key paths match REGISTRY_TARGETS
-if any(target["key"] in current_key for target in REGISTRY_TARGETS.get("SOFTWARE", [])):
-    events.append(
-        {
-            "hive": "SOFTWARE.REG",
-            "key_path": current_key,
-            "category": "reg_export",
-            "value_name": value_name,
-            "value": value,
-            "value_type": "raw",
-            "last_write": None,
-        }
-    )
+                # Only keep entries whose key path matches our SOFTWARE targets
+                software_targets = REGISTRY_TARGETS.get("SOFTWARE", [])
+                if not any(t["key"] in current_key for t in software_targets):
+                    continue
+
+                events.append(
+                    {
+                        "hive": "SOFTWARE.REG",
+                        "key_path": current_key,
+                        "category": "reg_export",
+                        "value_name": value_name,
+                        "value": value,
+                        "value_type": "raw",
+                        "last_write": None,
+                    }
+                )
 
     return events
 
@@ -243,7 +241,7 @@ def generate_registry_derivatives(hive_path: str, case_dir: str) -> Dict[str, An
     jsonl_path = os.path.join(reg_out_dir, f"{base}.jsonl")
     txt_path = os.path.join(reg_out_dir, f"{base}.txt")
 
-    # Decide which parser to use
+    # Choose parser based on extension
     if hive_path.lower().endswith(".reg"):
         events = parse_reg_file(hive_path)
     else:
