@@ -192,7 +192,15 @@ loadCasesBtn.addEventListener("click", async () => {
       li.onclick = async () => {
         const details = await callApi(`/cases/${c.case_id}`);
         caseDetails.textContent = pretty(details);
-      };
+
+        // remember selected case for Explain / MITRE
+        lastCaseId = c.case_id;
+
+        // populate timeline case id input
+        const caseIdInput = document.getElementById("case-id-input");
+        if (caseIdInput) caseIdInput.value = c.case_id;
+    };
+
 
       caseListDisplay.appendChild(li);
     }
