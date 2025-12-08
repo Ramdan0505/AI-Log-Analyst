@@ -265,6 +265,21 @@ def reindex_case(case_id: str):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+# CASE VIEWER — TIMELINE
+@app.get("/cases/{case_id}/timeline")
+def get_case_timeline(case_id: str):
+    case_dir = Path(ARTIFACT_DIR) / case_id
+    if not case_dir.is_dir():
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    try:
+        events = build_timeline(str(case_dir))
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+    return {"case_id": case_id, "events": events}
+
+
 
 
 # ---------------------------------------------------
