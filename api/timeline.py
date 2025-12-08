@@ -8,19 +8,21 @@ from typing import Any, Dict, List, Optional
 
 def _parse_timestamp(ts: Optional[str]) -> Optional[datetime]:
     """
-    Parse timestamp string into datetime.
+    Parse timestamp string into a *naive* datetime (no timezone).
 
-    EVTX timestamps look like:
-      2025-12-03T14:53:51.818457+00:00
-
-    Registry last_write (if present) should be ISO-like too.
+    This avoids mixing offset-aware (+00:00) and naive datetimes when sorting.
     """
     if not ts:
         return None
     try:
-        return datetime.fromisoformat(ts)
+        dt = datetime.fromisoformat(ts)
+        # If the datetime is offset-aware (has tzinfo), drop the tz to make it naive.
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return dt
     except Exception:
         return None
+
 
 
 # -----------------------------
