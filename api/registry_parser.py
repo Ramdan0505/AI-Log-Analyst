@@ -151,19 +151,16 @@ def iter_registry_events(hive_path: str) -> List[Dict[str, Any]]:
 
 def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
     r"""
-    Parse a REG file exported with `reg export`.
+    Parse a REG file exported with `reg export` and keep only high-value DFIR data:
 
-    This parser:
-      - Tracks the current key path [HKEY_...]
-      - Extracts value name + raw string
-      - KEEPS ONLY high-value DFIR paths:
-          * HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion          (OS metadata)
-          * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run         (system persistence)
-          * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce     (system persistence)
-          * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall   (installed software)
+      * HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion          (OS metadata)
+      * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run         (system persistence)
+      * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce     (system persistence)
+      * HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall   (installed software; 1 event per app)
     """
     events: List[Dict[str, Any]] = []
     current_key: Optional[str] = None
+    current_key_lower: Optional[str] = None
 
     # Normalized prefixes (lowercased) for matching
     os_meta_prefix = r"hkey_local_machine\software\microsoft\windows nt\currentversion"
@@ -171,14 +168,7 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
     runonce_prefix = r"hkey_local_machine\software\microsoft\windows\currentversion\runonce"
     uninstall_prefix = r"hkey_local_machine\software\microsoft\windows\currentversion\uninstall"
 
-    allowed_prefixes = [
-        os_meta_prefix,
-        run_prefix,
-        runonce_prefix,
-        uninstall_prefix,
-    ]
-
-    # For uninstall keys, only keep these value names
+    # For uninstall keys, only keep / aggregate these value names
     uninstall_value_whitelist = {
         "displayname",
         "displayicon",
@@ -189,6 +179,45 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
         "quietuninstallstring",
         "displayversion",
     }
+
+    # State for aggregating uninstall values per subkey
+    current_uninstall_values: Dict[str, str] = {}
+
+    def flush_uninstall_key():
+        """Emit a single event for the current uninstall key, if we have useful data."""
+        nonlocal current_key, current_uninstall_values, events
+        if not current_key or not current_uninstall_values:
+            return
+
+        display_name = current_uninstall_values.get("displayname", "(unknown)")
+        # Build a compact summary string from selected fields
+        fields_order = [
+            "displayversion",
+            "publisher",
+            "installdate",
+            "installlocation",
+            "uninstallstring",
+            "quietuninstallstring",
+        ]
+        parts = []
+        for k in fields_order:
+            if k in current_uninstall_values:
+                parts.append(f"{k}={current_uninstall_values[k]}")
+        summary = "; ".join(parts) if parts else ""
+
+        events.append(
+            {
+                "hive": "SOFTWARE.REG",
+                "key_path": current_key,
+                "category": "installed_software",
+                "value_name": display_name,
+                "value": summary,
+                "value_type": "aggregated",
+                "last_write": None,
+            }
+        )
+
+        current_uninstall_values = {}
 
     # reg export uses UTF-16 LE with BOM on modern Windows
     with open(reg_path, "r", encoding="utf-16", errors="ignore") as f:
@@ -201,20 +230,18 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
 
             # Section header: [HKEY_LOCAL_MACHINE\SOFTWARE\...]
             if line.startswith("[") and line.endswith("]"):
+                # before switching keys, flush any pending uninstall aggregation
+                if current_key_lower and current_key_lower.startswith(uninstall_prefix):
+                    flush_uninstall_key()
+
                 current_key = line[1:-1]
+                current_key_lower = current_key.lower()
                 continue
 
-            if "=" in line and current_key:
+            if "=" in line and current_key and current_key_lower:
                 name_part, value_part = line.split("=", 1)
                 name_part = name_part.strip()
                 value_part = value_part.strip()
-
-                # Normalize key path for prefix matching
-                key_lower = current_key.lower()
-
-                # Filter on allowed root prefixes only
-                if not any(key_lower.startswith(p) for p in allowed_prefixes):
-                    continue
 
                 # Determine value name
                 if name_part == "@":
@@ -226,24 +253,67 @@ def parse_reg_file(reg_path: str) -> List[Dict[str, Any]]:
 
                 value = value_part  # raw registry value string
 
-                # Additional filter for Uninstall keys: only keep important fields
-                if key_lower.startswith(uninstall_prefix):
-                    if value_name.lower() not in uninstall_value_whitelist:
-                        continue
+                # 1) OS metadata — only root key, not subkeys
+                if current_key_lower == os_meta_prefix:
+                    events.append(
+                        {
+                            "hive": "SOFTWARE.REG",
+                            "key_path": current_key,
+                            "category": "os_metadata",
+                            "value_name": value_name,
+                            "value": value,
+                            "value_type": "raw",
+                            "last_write": None,
+                        }
+                    )
+                    continue
 
-                events.append(
-                    {
-                        "hive": "SOFTWARE.REG",
-                        "key_path": current_key,
-                        "category": "reg_export",
-                        "value_name": value_name,
-                        "value": value,
-                        "value_type": "raw",
-                        "last_write": None,
-                    }
-                )
+                # 2) Run / RunOnce persistence (any subkey under these)
+                if current_key_lower.startswith(run_prefix):
+                    events.append(
+                        {
+                            "hive": "SOFTWARE.REG",
+                            "key_path": current_key,
+                            "category": "system_persistence_run",
+                            "value_name": value_name,
+                            "value": value,
+                            "value_type": "raw",
+                            "last_write": None,
+                        }
+                    )
+                    continue
+
+                if current_key_lower.startswith(runonce_prefix):
+                    events.append(
+                        {
+                            "hive": "SOFTWARE.REG",
+                            "key_path": current_key,
+                            "category": "system_persistence_runonce",
+                            "value_name": value_name,
+                            "value": value,
+                            "value_type": "raw",
+                            "last_write": None,
+                        }
+                    )
+                    continue
+
+                # 3) Uninstall keys — aggregate per subkey
+                if current_key_lower.startswith(uninstall_prefix):
+                    vn_lower = value_name.lower()
+                    if vn_lower in uninstall_value_whitelist:
+                        # store raw, but strip surrounding quotes for cleanliness
+                        if value.startswith('"') and value.endswith('"'):
+                            cleaned = value[1:-1]
+                        else:
+                            cleaned = value
+                        current_uninstall_values[vn_lower] = cleaned
+
+    # Flush last uninstall key after loop
+    if current_key_lower and current_key_lower.startswith(uninstall_prefix):
+        flush_uninstall_key()
 
     return events
+
 
 
 
