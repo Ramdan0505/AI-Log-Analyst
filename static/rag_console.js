@@ -333,3 +333,88 @@ mitreExtractBtn.addEventListener("click", async () => {
   }
 });
 
+function getSelectedCaseId() {
+  const el = document.getElementById("case-id-input");
+  return el ? el.value.trim() : "";
+}
+
+async function loadTimeline() {
+  const caseId = getSelectedCaseId();
+  if (!caseId) {
+    alert("Please select or enter a case ID first.");
+    return;
+  }
+
+  const container = document.getElementById("timeline-container");
+  container.textContent = "Loading timeline...";
+
+  try {
+    const resp = await fetch(`/cases/${encodeURIComponent(caseId)}/timeline`);
+    if (!resp.ok) {
+      const text = await resp.text();
+      container.textContent = `Error loading timeline: ${resp.status} ${text}`;
+      return;
+    }
+
+    const data = await resp.json();
+    const events = data.events || [];
+
+    if (events.length === 0) {
+      container.textContent = "No timeline events found for this case.";
+      return;
+    }
+
+    // Build table
+    const table = document.createElement("table");
+    table.style.width = "100%";
+    table.style.borderCollapse = "collapse";
+    table.style.fontSize = "0.9rem";
+
+    const headerRow = document.createElement("tr");
+    const headers = ["timestamp", "source", "event_id", "description"];
+    headers.forEach((h) => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      th.style.borderBottom = "1px solid #ccc";
+      th.style.textAlign = "left";
+      th.style.padding = "4px 6px";
+      headerRow.appendChild(th);
+    });
+    table.appendChild(headerRow);
+
+    events.forEach((ev) => {
+      const tr = document.createElement("tr");
+
+      function addCell(text) {
+        const td = document.createElement("td");
+        td.textContent = text ?? "";
+        td.style.padding = "3px 6px";
+        td.style.verticalAlign = "top";
+        tr.appendChild(td);
+      }
+
+      addCell(ev.timestamp || "UNKNOWN_TIME");
+      addCell(ev.source || "");
+      addCell(ev.event_id !== null && ev.event_id !== undefined ? ev.event_id : "");
+      addCell(ev.description || "");
+
+      table.appendChild(tr);
+    });
+
+    // Replace container content
+    container.innerHTML = "";
+    container.appendChild(table);
+  } catch (e) {
+    console.error(e);
+    container.textContent = "Failed to load timeline: " + e;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("btnTimeline");
+  if (btn) {
+    btn.addEventListener("click", loadTimeline);
+  }
+});
+
+
