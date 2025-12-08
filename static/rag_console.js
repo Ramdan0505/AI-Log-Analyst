@@ -349,7 +349,7 @@ async function loadTimeline() {
   container.textContent = "Loading timeline...";
 
   try {
-    const resp = await fetch(`/cases/${encodeURIComponent(caseId)}/timeline`);
+    const resp = await fetch(baseUrl + `/cases/${encodeURIComponent(caseId)}/timeline`);
     if (!resp.ok) {
       const text = await resp.text();
       container.textContent = `Error loading timeline: ${resp.status} ${text}`;
