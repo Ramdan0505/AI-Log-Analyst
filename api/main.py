@@ -353,17 +353,18 @@ Your report MUST include:
     # Call Ollama (from inside Docker using host.docker.internal)
     try:
         resp = requests.post(
-            "http://host.docker.internal:11434/api/chat",
-            json={
-                "model": "llama3",  # adjust model name as needed
-                "messages": [
-                    {"role": "system", "content": "You are a professional DFIR analyst."},
-                    {"role": "user", "content": prompt},
-                ],
-                "stream": False,
-            },
-            timeout=180,
-        )
+        f"{OLLAMA_BASE_URL}/api/chat",
+        json={
+            "model": "llama3",  # adjust model name if you use a different local model
+            "messages": [
+                {"role": "system", "content": "You are a professional DFIR analyst."},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+    },
+    timeout=180,
+)
+
         resp.raise_for_status()
     except Exception as e:
         return JSONResponse(
