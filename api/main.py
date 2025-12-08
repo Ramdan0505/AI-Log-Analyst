@@ -7,6 +7,7 @@ import uuid
 import subprocess
 import json
 
+from api.timeline import build_timeline
 from typing import Any, Dict
 from api.ingest_utils import build_and_index_case_corpus
 from fastapi import Body, FastAPI, UploadFile, BackgroundTasks
