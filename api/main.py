@@ -268,6 +268,9 @@ def get_case_timeline(case_id: str):
 # EXPLAIN CASE (OpenAI GPT-5.1)
 # ------------------------------------------------------------------------------------
 
+# ---------------------------------------------------
+# AI Explain Case (OpenAI + analyst notes)
+# ---------------------------------------------------
 @app.post("/explain_case")
 def explain_case_openai(body: Dict[str, Any] = Body(...)):
     case_id = body.get("case_id")
@@ -278,17 +281,35 @@ def explain_case_openai(body: Dict[str, Any] = Body(...)):
     if not case_path.is_dir():
         return JSONResponse(status_code=404, content={"error": "Case not found"})
 
-    ingest = read_text_file(case_path, "ingest.json")
-    triage_findings = read_text_file(case_path, "triage_findings.json")
-    triage_topn = read_text_file(case_path, "triage_topn.json")
-    registry_summaries = read_text_file(case_path, "registry_summaries.jsonl")
-    evtx_summaries = read_text_file(case_path, "evtx_summaries.jsonl")
-    playbook = read_text_file(case_path, "playbook.md")
+    # Helper to read text files safely, relative to case_path
+    def read_text(name: str) -> str:
+        p = case_path / name
+        if not p.exists():
+            return ""
+        try:
+            with p.open("r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            return ""
 
+    # Core artifacts
+    ingest = read_text("ingest.json")
+    triage_findings = read_text("triage_findings.json")
+    triage_topn = read_text("triage_topn.json")
+    registry_summaries = read_text("registry_summaries.jsonl")
+    evtx_summaries = read_text("evtx_summaries.jsonl")
+    playbook = read_text("playbook.md")
+
+    # NEW: analyst notes from the bundle (e.g. Notes/operator_notes.txt)
+    analyst_notes = read_text("Notes/operator_notes.txt")
+
+    # Build DFIR prompt
     prompt = f"""
-You are a senior DFIR analyst.
+You are a senior DFIR (Digital Forensics and Incident Response) analyst.
 
 Analyze the following forensic case and produce a structured, professional report.
+If some artifacts are missing (no triage findings, no EVTX summaries, etc.), 
+be explicit about those data gaps and base your conclusions only on available evidence.
 
 CASE ID: {case_id}
 
@@ -310,14 +331,17 @@ CASE ID: {case_id}
 ### Playbook Notes
 {playbook or "(none)"}
 
+### Analyst Notes (operator notes from the bundle)
+{analyst_notes or "(none)"}
+
 Your report MUST include:
 - Executive Summary
 - Indicators of Compromise (IOCs)
 - Key Evidence
-- Likely MITRE ATT&CK Techniques (ID + name)
-- Timeline of Events
-- Recommended Next Steps
-- Confidence + Data Gaps
+- Likely MITRE ATT&CK Techniques (ID + name) with brief justification
+- Narrative Timeline of Activity
+- Recommended Next Steps for Investigators
+- Confidence Level and Any Data Gaps
 """
 
     try:
@@ -326,14 +350,23 @@ Your report MUST include:
             messages=[
                 {"role": "system", "content": "You are a professional DFIR analyst."},
                 {"role": "user", "content": prompt},
-            ]
+            ],
         )
         summary = response.choices[0].message.content.strip()
-
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"OpenAI request failed: {str(e)}"})
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"OpenAI request failed: {str(e)}"},
+        )
+
+    if not summary:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "OpenAI did not return a summary"},
+        )
 
     return {"case_id": case_id, "summary": summary}
+
 
 @app.post("/worker_done")
 def worker_done(body: dict = Body(...)):
