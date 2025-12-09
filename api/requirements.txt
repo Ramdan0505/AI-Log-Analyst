@@ -13,3 +13,4 @@ regipy==4.0.0
 python-evtx==0.6.1
 python-magic==0.4.27
 pydantic==1.10.15
+openai>=1.0.0

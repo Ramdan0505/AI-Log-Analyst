@@ -6,3 +6,5 @@ regipy==4.0.0
 python-evtx==0.6.1
 python-magic==0.4.27
 requests==2.31.0
+openai>=1.0.0
+
