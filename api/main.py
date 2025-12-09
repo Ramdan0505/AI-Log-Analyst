@@ -281,16 +281,22 @@ def explain_case_openai(body: Dict[str, Any] = Body(...)):
     if not case_path.is_dir():
         return JSONResponse(status_code=404, content={"error": "Case not found"})
 
-    # Helper to read text files safely, relative to case_path
+        # Helper to read text files safely, relative to case_path
     def read_text(name: str) -> str:
-        p = case_path / name
-        if not p.exists():
-            return ""
-        try:
-            with p.open("r", encoding="utf-8") as f:
-                return f.read()
-        except Exception:
-            return ""
+        # Look in both the root and the extracted 'files/' folder
+        candidates = [
+            case_path / name,                  # e.g. /data/artifacts/<id>/Notes/...
+            case_path / "files" / name,        # e.g. /data/artifacts/<id>/files/Notes/...
+        ]
+        for p in candidates:
+            if p.exists():
+                try:
+                    with p.open("r", encoding="utf-8") as f:
+                        return f.read()
+                except Exception:
+                    continue
+        return ""
+
 
     # Core artifacts
     ingest = read_text("ingest.json")
