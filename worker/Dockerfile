@@ -38,4 +38,4 @@ RUN mkdir -p /data
 # -----------------------------------------------------------
 # Start the worker
 # -----------------------------------------------------------
-CMD ["python", "worker/extract_job.py"]
+CMD ["sleep", "infinity"]
