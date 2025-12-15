@@ -9,6 +9,7 @@ import re
 import requests
 from pathlib import Path
 from datetime import datetime
+from embedder import embed_texts
 
 # -------------------------------------------------------
 # NEW: Load env + OpenAI client
@@ -29,6 +30,69 @@ API_URL = os.getenv("API_URL", "http://api:8000")  # Docker internal hostname
 # ----------------------- helpers -----------------------
 
 ARTIFACTS_SUBDIR = "files"
+
+def build_embedding_index(out_dir: str, case_id: str):
+    """
+    Minimal: embed EVTX summaries for this case into Chroma.
+    Uses evtx_summaries.jsonl (already produced by parse_evtx).
+    """
+    summaries_path = os.path.join(out_dir, "evtx_summaries.jsonl")
+    if not os.path.exists(summaries_path):
+        print(f"[worker] No evtx_summaries.jsonl found for case {case_id}; skipping embedding.")
+        return
+
+    texts = []
+    metas = []
+
+    # Keep it bounded so you don't embed 50k events by accident.
+    # Start with first 1000 lines for MVP and tune later.
+    max_lines = 1000
+
+    with open(summaries_path, "r", encoding="utf-8") as f:
+        for idx, line in enumerate(f):
+            if idx >= max_lines:
+                break
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                ev = json.loads(line)
+            except Exception:
+                continue
+
+            # Build a compact text string that embeds well.
+            # (Not changing your EVTX parsing; just formatting existing fields.)
+            event_id = ev.get("event_id")
+            ts = ev.get("timestamp")
+            src_file = ev.get("file")
+            snippet = ev.get("xml_snippet") or ""
+
+            text = (
+                f"EVTX Event Summary\n"
+                f"case_id={case_id}\n"
+                f"file={src_file}\n"
+                f"timestamp={ts}\n"
+                f"event_id={event_id}\n"
+                f"xml_snippet={snippet}"
+            )
+
+            texts.append(text)
+            metas.append({
+                "case_id": case_id,
+                "source": "evtx",
+                "file": src_file,
+                "timestamp": ts,
+                "event_id": event_id,
+            })
+
+    if not texts:
+        print(f"[worker] No EVTX records loaded from {summaries_path}; skipping embedding.")
+        return
+
+    embed_texts(case_id, texts, metas)
+    print(f"[worker] Embedded {len(texts)} EVTX summaries into Chroma for case {case_id}")
+
 
 
 def hash_file(path):
