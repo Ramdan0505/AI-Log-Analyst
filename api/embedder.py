@@ -41,15 +41,25 @@ def semantic_search(case_id: str, query: str, top_k: int = 5) -> Dict[str, Any]:
     q_emb = _model.encode(query).tolist()
     res = coll.query(query_embeddings=[q_emb], n_results=top_k)
 
+    # Treat high distances as "no match"
+    max_distance = float(os.getenv("SEARCH_MAX_DISTANCE", "0.55"))
+
     hits = []
     for i in range(len(res["ids"][0])):
+        dist = res["distances"][0][i]
+        if dist is None:
+            continue
+        if dist > max_distance:
+            continue
+
         hits.append(
             {
                 "id": res["ids"][0][i],
-                # FIX: call it what it is
-                "distance": res["distances"][0][i],
+                "distance": dist,
                 "text": res["documents"][0][i],
                 "metadata": res["metadatas"][0][i],
             }
         )
+
     return {"results": hits}
+
