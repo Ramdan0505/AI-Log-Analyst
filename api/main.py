@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from dotenv import load_dotenv
+from datetime import datetime
 from openai import OpenAI
 
 from api.timeline import build_timeline
@@ -120,6 +121,22 @@ def ingest_text(body: Dict[str, Any] = Body(...)):
 
     case_id = (body.get("case_id") or "").strip() or str(uuid.uuid4())
     metadata = body.get("metadata") or {"source": "ui"}
+
+    # Make text-ingest create a real case folder like file ingest
+    dest_dir = os.path.join(ARTIFACT_DIR, case_id)
+    os.makedirs(dest_dir, exist_ok=True)
+
+    ingest_meta = {
+        "case_id": case_id,
+        "source": "text",
+        "created_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "text_preview": text[:200],
+        "metadata": metadata,
+    }
+
+    # Write ingest.json so /cases can discover it
+    with open(os.path.join(dest_dir, "ingest.json"), "w", encoding="utf-8") as f:
+        json.dump(ingest_meta, f, indent=2, ensure_ascii=False)
 
     try:
         embed_texts(case_id, [text], [metadata])
