@@ -56,8 +56,21 @@ app.add_middleware(
 
 def save_upload(file: UploadFile, target_path: str) -> None:
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+    # ensure we copy from the beginning of the stream
+    try:
+        file.file.seek(0)
+    except Exception:
+        pass
+
     with open(target_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
+
+    # ensure bytes hit disk
+    fsize = os.path.getsize(target_path)
+    if fsize == 0:
+        raise RuntimeError(f"Saved upload is 0 bytes: {target_path}")
+
 
 
 def hash_file(path: str) -> str:
