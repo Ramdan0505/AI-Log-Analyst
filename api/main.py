@@ -94,17 +94,27 @@ async def ingest_image(file: UploadFile, background_tasks: BackgroundTasks):
     dest_dir = os.path.join(ARTIFACT_DIR, case_id)
     os.makedirs(dest_dir, exist_ok=True)
 
-    image_path = os.path.join(dest_dir, file.filename)
+    safe_name = os.path.basename(file.filename)
+    image_path = os.path.join(dest_dir, safe_name)
+
     save_upload(file, image_path)
 
+    #verify it actually saved
+    if (not os.path.exists(image_path)) or (os.path.getsize(image_path) == 0):
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Upload save failed", "path": image_path}
+        )
+
     sha = hash_file(image_path)
-    ingest_meta = {"case_id": case_id, "filename": file.filename, "sha256": sha}
+    ingest_meta = {"case_id": case_id, "filename": safe_name, "sha256": sha}
 
     with open(os.path.join(dest_dir, "ingest.json"), "w", encoding="utf-8") as f:
         json.dump(ingest_meta, f, indent=2, ensure_ascii=False)
 
     background_tasks.add_task(kick_extract_task, image_path, case_id)
     return ingest_meta
+
 
 # ------------------------------------------------------------------------------------
 # INGEST RAW TEXT
