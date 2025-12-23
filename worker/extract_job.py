@@ -37,70 +37,45 @@ from embedder import embed_texts
 
 
 def build_embedding_index(out_dir: str, case_id: str):
-    """
-    Build a Chroma embedding index for this case by reading evtx_summaries.jsonl
-    and embedding a compact, meaningful text representation of each event.
-    """
     summaries_path = os.path.join(out_dir, "evtx_summaries.jsonl")
     if not os.path.exists(summaries_path):
-        print(f"[worker] No evtx_summaries.jsonl for case {case_id}; skipping embedding.")
+        print("[embed] No evtx summaries found, skipping embedding")
         return
 
     texts = []
-    metas = []
-
-    # Keep bounded for MVP so you don't embed an unbounded number of records.
-    max_lines = int(os.getenv("EMBED_MAX_LINES", "1000"))
+    metadatas = []
 
     with open(summaries_path, "r", encoding="utf-8") as f:
-        for idx, line in enumerate(f):
-            if idx >= max_lines:
-                break
-
-            line = line.strip()
-            if not line:
-                continue
-
+        for line in f:
             try:
                 ev = json.loads(line)
             except Exception:
                 continue
 
-            src_file = ev.get("file")
-            record_num = ev.get("record_num")
-            ts = ev.get("timestamp")
-            event_id = ev.get("event_id")
-            snippet = (ev.get("xml_snippet") or "").strip()
-
-            # Minimal but meaningful “event card” text for embeddings
+            # Build meaningful semantic text
             text = (
-                f"Windows Event Log (EVTX) record\n"
-                f"case_id: {case_id}\n"
-                f"file: {src_file}\n"
-                f"record_num: {record_num}\n"
-                f"timestamp: {ts}\n"
-                f"event_id: {event_id}\n"
-                f"details:\n{snippet}"
+                f"Windows Event Log entry. "
+                f"Event ID {ev.get('event_id')}. "
+                f"Provider file {ev.get('file')}. "
+                f"Timestamp {ev.get('timestamp')}. "
+                f"Details: {ev.get('xml_snippet', '')}"
             )
 
             texts.append(text)
-            metas.append(
-                {
-                    "case_id": case_id,
-                    "source": "evtx",
-                    "file": src_file,
-                    "record_num": record_num,
-                    "timestamp": ts,
-                    "event_id": event_id,
-                }
-            )
+            metadatas.append({
+                "source": "evtx",
+                "event_id": ev.get("event_id"),
+                "file": ev.get("file"),
+                "case_id": case_id,
+            })
 
     if not texts:
-        print(f"[worker] No usable EVTX entries found in {summaries_path}; skipping embedding.")
+        print("[embed] No texts generated, nothing to embed")
         return
 
-    embed_texts(case_id, texts, metas)
-    print(f"[worker] Embedded {len(texts)} EVTX records for case {case_id}")
+    embed_texts(case_id, texts, metadatas)
+    print(f"[embed] Embedded {len(texts)} EVTX records for case {case_id}")
+
 
 
 
