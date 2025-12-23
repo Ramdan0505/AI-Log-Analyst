@@ -198,9 +198,6 @@ class SearchRequest(BaseModel):
     include_metadata: bool = True
 
 
-
-
-
 @app.post("/search")
 def search_post(req: SearchRequest):
     try:
