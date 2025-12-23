@@ -198,12 +198,7 @@ class SearchRequest(BaseModel):
     include_metadata: bool = True
 
 
-@app.get("/search")
-def search_get(case_id: str, q: str, top_k: int = 5):
-    try:
-        return semantic_search(case_id, q, top_k)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 
 @app.post("/search")
@@ -448,7 +443,20 @@ Your report MUST include:
 def worker_done(body: dict = Body(...)):
     case_id = body.get("case_id")
     print(f"[API] Worker reports extraction complete for case {case_id}")
-    return {"status": "ok", "case_id": case_id}
+
+    if not case_id:
+        return JSONResponse(status_code=400, content={"error": "Missing case_id"})
+
+    case_dir = Path(ARTIFACT_DIR) / case_id
+    if not case_dir.is_dir():
+        return JSONResponse(status_code=404, content={"error": "Case folder not found"})
+
+    # Use existing logic to build embeddings for this case
+    try:
+        chunks = build_and_index_case_corpus(str(case_dir), case_id)
+        return {"status": "ok", "case_id": case_id, "indexed_chunks": chunks}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Indexing failed: {str(e)}"})
 
 # ------------------------------------------------------------------------------------
 # MITRE ATT&CK TAGGING (OpenAI GPT-5.1)
