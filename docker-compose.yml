@@ -20,7 +20,6 @@ services:
       ARTIFACT_DIR: /data/artifacts     # Keeps artifacts in persistent storage
     depends_on:
       - chroma
-      - worker
     restart: unless-stopped
 
 
