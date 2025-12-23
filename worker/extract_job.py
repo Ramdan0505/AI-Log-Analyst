@@ -33,17 +33,14 @@ ARTIFACTS_SUBDIR = "files"
 
 # ---------------- Embedding index ----------------------
 
-from embedder import embed_texts
-
-
 def build_embedding_index(out_dir: str, case_id: str):
     summaries_path = os.path.join(out_dir, "evtx_summaries.jsonl")
     if not os.path.exists(summaries_path):
-        print("[embed] No evtx summaries found, skipping embedding")
+        print(f"[embed] No evtx_summaries.jsonl for case {case_id}; skipping")
         return
 
     texts = []
-    metadatas = []
+    metas = []
 
     with open(summaries_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -52,29 +49,30 @@ def build_embedding_index(out_dir: str, case_id: str):
             except Exception:
                 continue
 
-            # Build meaningful semantic text
             text = (
-                f"Windows Event Log entry. "
-                f"Event ID {ev.get('event_id')}. "
-                f"Provider file {ev.get('file')}. "
-                f"Timestamp {ev.get('timestamp')}. "
-                f"Details: {ev.get('xml_snippet', '')}"
+                f"Windows event log record. "
+                f"event_id={ev.get('event_id')} "
+                f"file={ev.get('file')} "
+                f"timestamp={ev.get('timestamp')} "
+                f"snippet={ev.get('xml_snippet', '')}"
             )
 
             texts.append(text)
-            metadatas.append({
+            metas.append({
                 "source": "evtx",
+                "case_id": case_id,
                 "event_id": ev.get("event_id"),
                 "file": ev.get("file"),
-                "case_id": case_id,
+                "timestamp": ev.get("timestamp"),
             })
 
     if not texts:
-        print("[embed] No texts generated, nothing to embed")
+        print(f"[embed] No usable EVTX lines for case {case_id}; skipping")
         return
 
-    embed_texts(case_id, texts, metadatas)
-    print(f"[embed] Embedded {len(texts)} EVTX records for case {case_id}")
+    embed_texts(case_id, texts, metas)
+    print(f"[embed] Embedded {len(texts)} records for case {case_id}")
+
 
 
 
@@ -241,7 +239,6 @@ def parse_registry(out_dir):
 
 # ---------------- Embedding index ----------------------
 
-from embedder import embed_texts
 
 
 def build_embedding_index(out_dir, case_id):
