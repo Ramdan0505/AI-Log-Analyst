@@ -96,6 +96,16 @@ def read_text_file(base: Path, name: str) -> str:
     except Exception:
         return ""
 
+def read_limited_text(path: Path, max_chars: int = 120_000) -> str:
+    if not path.exists():
+        return ""
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as f:
+            return f.read(max_chars)
+    except Exception:
+        return ""
+
+
 # ------------------------------------------------------------------------------------
 # INGEST FILE ENDPOINT
 # ------------------------------------------------------------------------------------
@@ -361,7 +371,7 @@ def explain_case_openai(body: Dict[str, Any] = Body(...)):
     triage_findings = read_text("triage_findings.json")
     triage_topn = read_text("triage_topn.json")
     registry_summaries = read_text("registry_summaries.jsonl")
-    evtx_summaries = read_text("evtx_summaries.jsonl")
+    evtx_summaries = read_limited_text(case_path / "evtx_summaries.jsonl")
     playbook = read_text("playbook.md")
 
     # Analyst notes from the bundle (e.g. Notes/operator_notes.txt)
@@ -435,9 +445,8 @@ Your report MUST include:
 # WORKER CALLBACK
 # ------------------------------------------------------------------------------------
 
-
 @app.post("/worker_done")
-def worker_done(body: dict = Body(...)):
+def worker_done(body: dict = Body(...), background_tasks: BackgroundTasks = None):
     case_id = body.get("case_id")
     print(f"[API] Worker reports extraction complete for case {case_id}")
 
@@ -448,12 +457,12 @@ def worker_done(body: dict = Body(...)):
     if not case_dir.is_dir():
         return JSONResponse(status_code=404, content={"error": "Case folder not found"})
 
-    # Use existing logic to build embeddings for this case
-    try:
-        chunks = build_and_index_case_corpus(str(case_dir), case_id)
-        return {"status": "ok", "case_id": case_id, "indexed_chunks": chunks}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Indexing failed: {str(e)}"})
+    # schedule indexing; return fast so worker doesn't time out
+    if background_tasks is not None:
+        background_tasks.add_task(build_and_index_case_corpus, str(case_dir), case_id)
+
+    return {"status": "ok", "case_id": case_id}
+
 
 # ------------------------------------------------------------------------------------
 # MITRE ATT&CK TAGGING (OpenAI GPT-5.1)
