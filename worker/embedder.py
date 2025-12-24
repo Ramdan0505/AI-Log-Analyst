@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 import os
+from api.embedder import embed_texts
 
 from sentence_transformers import SentenceTransformer
 import chromadb
