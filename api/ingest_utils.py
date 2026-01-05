@@ -14,17 +14,45 @@ REGISTRY_EXTENSIONS = {".dat", ".hiv", ".hive", ".reg"}
 
 def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
     """
-    Walk the case directory, convert EVTX + Registry → text, collect all text,
-    write EVTX and Registry summaries to JSONL, and push everything
-    into Chroma via embed_texts().
+    Walk the case directory, collect all extracted text (EVTX, registry, files),
+    and push it into Chroma via embed_texts().
 
     Returns number of text chunks indexed.
     """
+
     text_chunks: List[str] = []
     metadata_list: List[Dict[str, Any]] = []
 
+    # -------------------------------------------------
+    # 1) Index EVTX-derived text files
+    # -------------------------------------------------
+    evtx_txt_dir = os.path.join(case_dir, "artifacts", "evtx")
+
+    if os.path.isdir(evtx_txt_dir):
+        for fname in os.listdir(evtx_txt_dir):
+            if not fname.endswith(".txt"):
+                continue
+
+            path = os.path.join(evtx_txt_dir, fname)
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    text_chunks.append(line)
+                    metadata_list.append({
+                        "source": "evtx",
+                        "case_id": case_id,
+                        "file": f"artifacts/evtx/{fname}",
+                    })
+
+    # -------------------------------------------------
+    # 2) Walk remaining files (registry + generic text)
+    # -------------------------------------------------
     evtx_summary_path = os.path.join(case_dir, "evtx_summaries.jsonl")
     reg_summary_path = os.path.join(case_dir, "registry_summaries.jsonl")
+
     evtx_summary_f = None
     reg_summary_f = None
 
@@ -38,89 +66,66 @@ def build_and_index_case_corpus(case_dir: str, case_id: str) -> int:
                 ext = os.path.splitext(filename)[1].lower()
                 rel_path = os.path.relpath(path, case_dir)
 
-                # Skip our own summary files to avoid feedback loops
+                # Skip generated summary files
                 if filename in ("evtx_summaries.jsonl", "registry_summaries.jsonl"):
                     continue
 
-                # 1) EVTX files
-                if ext == ".evtx":
-                    stats = generate_evtx_derivatives(path, case_dir)
-                    print(f"[EVTX] {filename}: {stats['events_count']} events parsed")
-
-                    with open(stats["txt_path"], "r", encoding="utf-8") as f:
-                        for line in f:
-                            line = line.strip()
-                            if not line:
-                                continue
-                            text_chunks.append(line)
-                            metadata_list.append(
-                                {
-                                    "source": "evtx",
-                                    "case_id": case_id,
-                                    "file": rel_path,
-                                }
-                            )
-                            evtx_summary_f.write(line + "\n")
-
-                # 2) Registry hives or REG exports
-                elif ext in REGISTRY_EXTENSIONS:
-                    print(f"[DEBUG] Registry candidate detected: {filename}")
+                # Registry hives
+                if ext in REGISTRY_EXTENSIONS:
                     stats = generate_registry_derivatives(path, case_dir)
-                    print(
-                        f"[REGISTRY] {filename}: {stats['events_count']} entries parsed"
-                    )
-
-                    if stats["events_count"] > 0:
+                    if stats.get("events_count", 0) > 0:
                         with open(stats["txt_path"], "r", encoding="utf-8") as f:
                             for line in f:
                                 line = line.strip()
                                 if not line:
                                     continue
+
                                 text_chunks.append(line)
-                                metadata_list.append(
-                                    {
-                                        "source": "registry",
-                                        "case_id": case_id,
-                                        "file": rel_path,
-                                    }
-                                )
+                                metadata_list.append({
+                                    "source": "registry",
+                                    "case_id": case_id,
+                                    "file": rel_path,
+                                })
                                 reg_summary_f.write(line + "\n")
 
-                # 3) Normal text-like files
+                # Plain text files
                 elif ext in TEXT_EXTENSIONS:
                     try:
-                        with open(
-                            path, "r", encoding="utf-8", errors="ignore"
-                        ) as f:
-                            content = f.read()
-                    except (UnicodeDecodeError, OSError):
+                        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                            content = f.read().strip()
+                    except Exception:
                         continue
 
-                    if content.strip():
+                    if content:
                         text_chunks.append(content)
-                        metadata_list.append(
-                            {
-                                "source": "file",
-                                "case_id": case_id,
-                                "file": rel_path,
-                            }
-                        )
+                        metadata_list.append({
+                            "source": "file",
+                            "case_id": case_id,
+                            "file": rel_path,
+                        })
+
     finally:
-        if evtx_summary_f is not None:
+        if evtx_summary_f:
             evtx_summary_f.close()
-        if reg_summary_f is not None:
+        if reg_summary_f:
             reg_summary_f.close()
 
-        if text_chunks:
-        # Batch to avoid exceeding embedder max batch size (5461)
-            max_batch = 5000  # stay safely under 5461
-            total = len(text_chunks)
-            for start in range(0, total, max_batch):
-                end = start + max_batch
-                batch_texts = text_chunks[start:end]
-                batch_meta = metadata_list[start:end]
-                print(f"[EMBED] case={case_id} batch={start}-{end-1} of {total}")
-                embed_texts(case_id, batch_texts, batch_meta)
+    # -------------------------------------------------
+    # 3) Embed into Chroma (batched)
+    # -------------------------------------------------
+    if not text_chunks:
+        print(f"[EMBED] No text found for case {case_id}")
+        return 0
 
-        return len(text_chunks)
+    max_batch = 5000
+    total = len(text_chunks)
 
+    for start in range(0, total, max_batch):
+        end = start + max_batch
+        batch_texts = text_chunks[start:end]
+        batch_meta = metadata_list[start:end]
+
+        print(f"[EMBED] case={case_id} batch={start}-{end-1} of {total}")
+        embed_texts(case_id, batch_texts, batch_meta)
+
+    return total
