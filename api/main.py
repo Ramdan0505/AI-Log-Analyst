@@ -53,6 +53,12 @@ app.add_middleware(
 # HELPER FUNCTIONS
 # ------------------------------------------------------------------------------------
 
+def read_limited_text(path: Path, max_chars=12000):
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    return text[:max_chars]
+
 
 def save_upload(file: UploadFile, target_path: str) -> None:
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
