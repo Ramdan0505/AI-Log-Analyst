@@ -16,7 +16,7 @@ Early DFIR work is slow because:
 - Context is fragmented across tools
 - AI is often used *without grounding*
 
-RADLab Investigator addresses this by:
+Lab Investigator addresses this by:
 - Treating investigations as **persistent cases**
 - Normalizing artifacts into searchable text
 - Using **vector search** instead of grep
