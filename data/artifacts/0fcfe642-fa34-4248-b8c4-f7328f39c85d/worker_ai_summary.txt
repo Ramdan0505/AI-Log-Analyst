@@ -1,0 +1,9 @@
+I don’t have access to your internal case management system or its contents, so I can’t see what “case 0fcfe642-fa34-4248-b8c4-f7328f39c85d” refers to or what was done in that specific matter.
+
+If you paste in (or attach) the case notes, acquisition logs, or a timeline for that case, I can:
+
+- Extract and list the acquisition / extraction steps in order  
+- Normalize tool names, versions, and settings used  
+- Highlight any gaps (e.g., missing hashes, incomplete chain-of-custody details)  
+
+Alternatively, if you just want a generic DFIR “extraction steps” template (e.g., for disk, mobile, or cloud), tell me the evidence type and I’ll summarize a standard, defensible extraction workflow.
