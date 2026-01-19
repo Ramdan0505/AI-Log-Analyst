@@ -1,0 +1,8 @@
+I don’t have direct access to your case management system or its contents, so I can’t see the specific artifacts or workflow tied to case `cb24a1fd-4958-460c-b209-eee367ac0c50`.
+
+If you paste or describe the extraction log/steps (e.g., tool output, acquisition notes, or a brief timeline of what was done), I can:
+
+- Condense them into a clear, bullet-point summary, and  
+- Organize them by phase (identification, acquisition, verification, parsing, export), device, or tool as needed.
+
+Please provide the relevant text or screenshots (with sensitive data redacted if required), and specify whether you want a brief bullet list or a more detailed procedural summary.
