@@ -1,0 +1,12 @@
+I don’t have access to your internal case management system or its contents, so I can’t see the details of case `83416134-505a-48e2-bc87-8535710e6fe2`. To summarize the extraction steps used in that case, I’d need either:
+
+- The actual case notes / workflow log for that case, or  
+- A description or export of the tool output (e.g., from your forensic suite, collection platform, or ticketing system).
+
+If you can paste in (or upload) the relevant case log or extraction/collection report, I can:
+
+- Identify each extraction step (tools used, sources, methods, parameters).  
+- Condense it into a clear, ordered summary (high level or highly detailed, as you prefer).  
+- Highlight any deviations from standard procedure and note key artifacts acquired.
+
+Provide the text/report, and tell me if you want a brief bullet summary or a detailed step‑by‑step procedure.

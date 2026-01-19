@@ -1,0 +1,6 @@
+I don’t have access to your internal case database or tooling, so I can’t see the specific artifacts or procedures tied to case `d6aab620-9cf6-4885-9695-cfe8ea5dd99b`. I can summarize the extraction steps if you provide either:
+
+- The tool output / case notes (e.g., logs from KAPE, Magnet, EnCase, FTK, X-Ways, etc.), or  
+- A brief description of which sources were acquired (e.g., full disk image, mobile, memory, cloud, logs) and which tools/commands were used.
+
+If you paste in the relevant portion of the case record or workflow, I’ll condense it into a clear, ordered list of extraction steps.
