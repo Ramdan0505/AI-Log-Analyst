@@ -184,18 +184,6 @@ def parse_registry(out_dir):
     # I am not altering your DFIR logic — only adding new capabilities.
     pass
 
-
-# ----------------------- Triage ------------------------
-
-# (your triage, ranking, playbook code is unchanged)
-
-# ---------------- Embedding index ----------------------
-
-
-
-
-
-
 # ----------------------- main --------------------------
 
 def main():
