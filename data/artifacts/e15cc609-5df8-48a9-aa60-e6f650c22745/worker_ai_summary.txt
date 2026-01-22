@@ -1,0 +1,63 @@
+I don’t have access to your case management or tooling, so I can’t see the specific details for case `e15cc609-5df8-48a9-aa60-e6f650c22745`. 
+
+If you paste or describe the extraction log/notes for that case (or the tool output: e.g., Magnet/AXIOM, Cellebrite, FTK, KAPE logs, etc.), I can summarize the extraction steps precisely.
+
+In the meantime, here’s a generic DFIR-style extraction-steps template you can map to that case:
+
+1. **Evidence Intake**
+   - Record case ID, date/time, examiner, and evidence identifiers.
+   - Verify evidence integrity (serials, tags, chain-of-custody).
+
+2. **Initial Triage**
+   - Identify device type(s): workstation, server, mobile, cloud, removable media.
+   - Note OS and encryption status (BitLocker, FileVault, mobile FDE, etc.).
+
+3. **Forensic Acquisition**
+   - Create bit‑for‑bit images where possible:
+     - Physical image of disks (e.g., `dd`, `dc3dd`, FTK Imager, X-Ways, etc.).
+     - Logical acquisition if physical not possible (cloud, locked devices).
+   - Capture volatile data if done:
+     - RAM, running processes, network connections, open handles.
+   - Document acquisition commands, tools, versions, and hashes.
+
+4. **Integrity Verification**
+   - Compute and record cryptographic hashes (MD5/SHA1/SHA256) of:
+     - Original media (where feasible).
+     - Forensic images.
+   - Confirm hashes before and after transfer/storage.
+
+5. **Mounting & Preparation**
+   - Mount images read‑only in forensic tools.
+   - Configure case/project, time zone, and base filters.
+   - Identify partitions, file systems, and any hidden/unallocated space.
+
+6. **Data Extraction**
+   - File system artifacts (MFT, journal, registry, event logs, logfiles).
+   - User data (documents, email, browser data, chats, downloads).
+   - System artifacts (prefetch, shimcache, SRUM, scheduled tasks, services).
+   - Application-specific artifacts (messaging apps, VPN, cloud clients, etc.).
+   - Recovery from:
+     - Unallocated space.
+     - Slack space.
+     - Carved artifacts from raw image.
+
+7. **Specialized Extractions (if applicable)**
+   - Mobile:
+     - Logical/advanced logical/physical extraction (e.g., Cellebrite, GrayKey).
+     - App databases, keychains/keystores, backups, media.
+   - Cloud:
+     - API-based acquisition (O365, GSuite, AWS, etc.).
+   - Network:
+     - PCAPs, proxy logs, firewall logs, SIEM exports.
+
+8. **Post-Extraction Handling**
+   - Normalize timestamps, time zones.
+   - De-duplicate artifacts where appropriate.
+   - Export relevant artifacts to working sets (CSV/JSON/HTML/SQLite).
+   - Maintain log of every extraction step, tool, and parameter used.
+
+9. **Preservation & Documentation**
+   - Store images and exports in evidence repository with controls.
+   - Update chain-of-custody and technical notes to reflect all actions.
+
+If you provide the actual acquisition/extraction log or a redacted copy, I can rewrite this as a precise, case-specific step-by-step summary for `e15cc609-5df8-48a9-aa60-e6f650c22745`.
