@@ -1,0 +1,16 @@
+I don’t have direct access to your DFIR case management system or its contents, so I can’t look up case `3cdc219a-3c0b-4b1d-8ed0-a982c1dc6df1` or see its specific extraction log.
+
+If you paste in the relevant portions of the case record (e.g., acquisition log, tool output, chain-of-custody notes), I can:
+
+- Identify and summarize the exact extraction steps taken (tool, version, mode, source, options, hashes, etc.).
+- Distinguish between logical vs. physical vs. file-based acquisitions.
+- Note any errors or anomalies during extraction.
+- Produce a concise, report-ready summary.
+
+Example of the kind of text to provide:
+
+- Imaging/acquisition logs
+- Triage/collection scripts or their console output
+- Case notes describing how evidence was acquired
+
+Paste that content here and I’ll produce a tight summary tailored to this case.
