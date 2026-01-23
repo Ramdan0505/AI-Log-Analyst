@@ -1,0 +1,12 @@
+I don’t have direct access to your case management system or its contents, so I can’t see what “case 86d0a9b4-99ec-47ec-adc9-96dd56eae054” refers to or what was done in it.
+
+If you paste in or upload:
+
+- The extraction log(s), or  
+- The workflow / notes for that case, or  
+- A screenshot or export from your DFIR tool
+
+I can then:
+
+- Identify the extraction stages that were performed (e.g., acquisition, verification, parsing, carving, triage, export), and  
+- Produce a concise, step‑by‑step summary tailored to that specific case.
