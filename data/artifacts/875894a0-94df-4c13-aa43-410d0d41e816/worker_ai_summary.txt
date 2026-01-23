@@ -1,0 +1,35 @@
+I don’t have direct access to your case management system or its contents, so I can’t see what was actually done for case `875894a0-94df-4c13-aa43-410d0d41e816`.
+
+If you paste in the case log, extraction worksheet, or tool output (e.g., Cellebrite/AXIOM/FTK/KAPE logs) related to that case, I can:
+
+- Identify all acquisition/extraction actions (what was imaged, how, and with which tools/versions).
+- Put them into a concise, chronological summary.
+- Highlight key parameters (hashes, write-blocking, source devices, scope, and any deviations from SOP).
+
+Without those details, the best I can offer is a generic structure you can map to your case:
+
+1. **Identification & preparation**
+   - Documented device(s) to be acquired (make/model/serial, user assignment).
+   - Photographed device condition and connections.
+   - Verified power state and network isolation.
+
+2. **Forensic preservation**
+   - Attached hardware write-blocker (for storage media) or enabled logical protection where applicable.
+   - Recorded BIOS/UEFI/boot settings if relevant.
+   - Documented chain of custody before and after imaging.
+
+3. **Acquisition / extraction**
+   - Performed physical / logical / file-system extraction as appropriate (e.g., full disk image, mobile full file system, cloud logical export).
+   - Used tool(s) and versions (e.g., `dd`, FTK Imager, X-Ways, AXIOM, Cellebrite, KAPE, etc.).
+   - Captured volatile data (RAM, network connections) when required and feasible.
+
+4. **Verification**
+   - Calculated and recorded hashes (e.g., MD5/SHA-1/SHA-256) for source and acquired images.
+   - Confirmed hash matches for verification copies.
+   - Stored images on evidence storage with integrity monitoring.
+
+5. **Documentation**
+   - Logged all timestamps, operators, tools, versions, options used, and any errors or anomalies.
+   - Noted any limitations (encrypted partitions, damaged sectors, partial extractions).
+
+If you provide the specific extraction notes or logs for case `875894a0-94df-4c13-aa43-410d0d41e816`, I’ll generate a precise step-by-step summary tailored to that case.
