@@ -20,7 +20,7 @@ services:
 
       # Demo tuning: stricter threshold => nonsense queries return []
       # If you want more results, raise this (e.g., 0.70).
-      SEARCH_MAX_DISTANCE: "0.60"
+      SEARCH_MAX_DISTANCE: "0.70"
     depends_on:
       - chroma
     restart: unless-stopped
@@ -46,7 +46,7 @@ services:
       # Keep worker+api consistent when embedding/indexing
       CHROMA_HOST: chroma
       CHROMA_PORT: "8000"
-      SEARCH_MAX_DISTANCE: "0.60"
+      SEARCH_MAX_DISTANCE: "0.70"
     depends_on:
       - api
       - chroma
