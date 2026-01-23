@@ -1,0 +1,8 @@
+I don’t have access to your internal case management system or case data, so I can’t see what “case 6f2fc392-5ed1-4ff2-8594-4f1bbb21a161” refers to or what was actually done in that investigation.
+
+If you provide:
+- The acquisition log or notes, or  
+- The tools/commands you used, or  
+- A short description of what sources were acquired (e.g., “Windows 11 laptop disk image + iPhone full file system + O365 mailbox export”),
+
+I can summarize the extraction steps clearly and concisely (e.g., in bullet-point form suitable for reporting or chain-of-custody documentation).
