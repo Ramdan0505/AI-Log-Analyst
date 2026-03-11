@@ -2,7 +2,7 @@
 import os
 import json
 from typing import Dict, Any, Generator, Optional, List
-from pyprefetch import Prefetch
+from prefetch import Prefetch
 
 def _safe_iso(ts: Any) -> Optional[str]:
     """
@@ -52,17 +52,16 @@ def iter_prefetch_events(prefetch_path):
     run_count = pf.run_count
 
     last_run = None
-    if pf.last_run_times:
-        last_run = pf.last_run_times[0]
+    if pf.timestamps:
+        last_run = pf.timestamps[0]
 
     referenced_files = pf.files_loaded or []
 
     full_path = None
-    if referenced_files:
-        for f in referenced_files:
-            if executable.lower() in f.lower():
-                full_path = f
-                break
+    for f in referenced_files:
+        if executable.lower() in f.lower():
+            full_path = f
+            break
 
     yield {
         "source": "prefetch",
