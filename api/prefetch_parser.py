@@ -1,37 +1,49 @@
-# api/prefetch_parser.py
 import os
 import json
 from typing import Dict, Any, Generator, Optional, List
+
 from windowsprefetch import Prefetch
 
-def _safe_iso(ts: Any) -> Optional[str]:
+
+def _safe_str(value: Any) -> Optional[str]:
     """
-    Convert a timestamp-like object to a string safely.
-    Works whether the parser returns a datetime or a plain string.
+    Convert values safely to string.
+    Returns None for empty/invalid values.
     """
-    if ts is None:
+    if value is None:
         return None
     try:
-        if hasattr(ts, "isoformat"):
-            return ts.isoformat()
-        return str(ts)
+        s = str(value).strip()
+        return s if s else None
     except Exception:
         return None
 
 
-def _extract_full_path(executable_name: Optional[str], referenced_files: List[str]) -> Optional[str]:
+def _pick_last_run(timestamps: List[Any]) -> Optional[str]:
     """
-    Best-effort guess for the executable's full path by looking through
-    referenced files and matching the executable name.
+    Prefetch exposes timestamps as a list of execution times.
+    We use the first one as the latest observed execution time.
     """
-    if not executable_name:
+    if not timestamps:
+        return None
+    try:
+        return _safe_str(timestamps[0])
+    except Exception:
+        return None
+
+
+def _extract_full_path(executable_name: Optional[str], resources: List[str]) -> Optional[str]:
+    """
+    Try to find the executable's full path from the Prefetch resources list.
+    """
+    if not executable_name or not resources:
         return None
 
     exe_upper = executable_name.upper()
 
-    for ref in referenced_files:
+    for item in resources:
         try:
-            candidate = str(ref).strip()
+            candidate = str(item).strip()
         except Exception:
             continue
 
@@ -44,52 +56,57 @@ def _extract_full_path(executable_name: Optional[str], referenced_files: List[st
     return None
 
 
-def iter_prefetch_events(prefetch_path):
+def iter_prefetch_events(prefetch_path: str) -> Generator[Dict[str, Any], None, None]:
+    """
+    Parse one .pf file and yield one normalized Prefetch event.
+    """
+    try:
+        pf = Prefetch(prefetch_path)
 
-    pf = Prefetch(prefetch_path)
+        executable = _safe_str(getattr(pf, "executableName", None))
+        run_count = getattr(pf, "runCount", None)
+        timestamps = getattr(pf, "timestamps", []) or []
+        resources = getattr(pf, "resources", []) or []
 
-    executable = pf.executable_name
-    run_count = pf.run_count
+        last_run = _pick_last_run(timestamps)
+        full_path = _extract_full_path(executable, resources)
 
-    last_run = None
-    if pf.timestamps:
-        last_run = pf.timestamps[0]
+        yield {
+            "source": "prefetch",
+            "prefetch_file": os.path.basename(prefetch_path),
+            "executable": executable,
+            "full_path": full_path,
+            "run_count": run_count,
+            "last_run": last_run,
+            "referenced_files_count": len(resources),
+        }
 
-    referenced_files = pf.files_loaded or []
-
-    full_path = None
-    for f in referenced_files:
-        if executable.lower() in f.lower():
-            full_path = f
-            break
-
-    yield {
-        "source": "prefetch",
-        "prefetch_file": os.path.basename(prefetch_path),
-        "executable": executable,
-        "full_path": full_path,
-        "run_count": run_count,
-        "last_run": str(last_run) if last_run else None,
-        "referenced_files_count": len(referenced_files)
-    }
+    except Exception as e:
+        print(f"[PREFETCH] failed to parse {prefetch_path}: {e}")
+        return
 
 
 def format_prefetch_event(event: Dict[str, Any]) -> str:
     """
-    Convert the normalized prefetch event into one line of text.
-    This is what gets indexed and searched semantically.
+    Convert Prefetch event into one-line normalized text for:
+    - semantic indexing
+    - case review
+    - AI explanation
     """
     ts = event.get("last_run") or "UNKNOWN_TIME"
     exe = event.get("executable") or "UNKNOWN_EXE"
     path = event.get("full_path") or ""
     run_count = event.get("run_count")
-    pf = event.get("prefetch_file") or ""
     refs = event.get("referenced_files_count")
+    pf_name = event.get("prefetch_file") or ""
 
     return (
-        f"[{ts}] SOURCE=prefetch Executable={exe} "
-        f"Path={path} RunCount={run_count} "
-        f"ReferencedFiles={refs} PrefetchFile={pf}"
+        f"[{ts}] SOURCE=prefetch "
+        f"Executable={exe} "
+        f"Path={path} "
+        f"RunCount={run_count} "
+        f"ReferencedFiles={refs} "
+        f"PrefetchFile={pf_name}"
     ).strip()
 
 
