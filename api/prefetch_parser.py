@@ -2,7 +2,7 @@
 import os
 import json
 from typing import Dict, Any, Generator, Optional, List
-
+from pyprefetch import Prefetch
 
 def _safe_iso(ts: Any) -> Optional[str]:
     """
@@ -44,51 +44,35 @@ def _extract_full_path(executable_name: Optional[str], referenced_files: List[st
     return None
 
 
-def iter_prefetch_events(prefetch_path: str) -> Generator[Dict[str, Any], None, None]:
-    """
-    Parse ONE .pf file and yield ONE normalized event dict.
+def iter_prefetch_events(prefetch_path):
 
-    IMPORTANT:
-    Replace the placeholder parsing block with a real Prefetch parser library.
-    The rest of the code is already structured for your architecture.
-    """
-    base_name = os.path.basename(prefetch_path)
+    pf = Prefetch(prefetch_path)
 
-    try:
-        # ---------------------------------------------------------
-        # TODO: Replace this block with your actual prefetch parser
-        # ---------------------------------------------------------
-        #
-        # Example idea:
-        #
-        # from <your_prefetch_library> import Prefetch
-        # pf = Prefetch(prefetch_path)
-        #
-        # executable = pf.executable_name
-        # run_count = pf.run_count
-        # last_run_raw = pf.last_run
-        # referenced_files = pf.files_loaded or []
-        #
-        # last_run = _safe_iso(last_run_raw)
-        # full_path = _extract_full_path(executable, referenced_files)
-        #
-        # yield {
-        #     "source": "prefetch",
-        #     "prefetch_file": base_name,
-        #     "executable": executable,
-        #     "full_path": full_path,
-        #     "run_count": run_count,
-        #     "last_run": last_run,
-        #     "referenced_files_count": len(referenced_files),
-        # }
-        #
-        # ---------------------------------------------------------
+    executable = pf.executable_name
+    run_count = pf.run_count
 
-        raise NotImplementedError("Prefetch parser library not wired in yet.")
+    last_run = None
+    if pf.last_run_times:
+        last_run = pf.last_run_times[0]
 
-    except Exception:
-        # Safe failure: no crash during ingest
-        return
+    referenced_files = pf.files_loaded or []
+
+    full_path = None
+    if referenced_files:
+        for f in referenced_files:
+            if executable.lower() in f.lower():
+                full_path = f
+                break
+
+    yield {
+        "source": "prefetch",
+        "prefetch_file": os.path.basename(prefetch_path),
+        "executable": executable,
+        "full_path": full_path,
+        "run_count": run_count,
+        "last_run": str(last_run) if last_run else None,
+        "referenced_files_count": len(referenced_files)
+    }
 
 
 def format_prefetch_event(event: Dict[str, Any]) -> str:
