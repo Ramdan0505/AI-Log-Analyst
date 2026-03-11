@@ -1,6 +1,6 @@
 from windowsprefetch import Prefetch
 
-pf_path = r"C:\path\to\your\test.pf"
+pf_path = r"C:\Projects\radlab-preinvest\test.pf"
 
 pf = Prefetch(pf_path)
 
