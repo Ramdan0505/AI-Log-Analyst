@@ -4,7 +4,50 @@ import json
 from datetime import datetime, MAXYEAR
 from typing import Any, Dict, List, Optional
 
+def _load_prefetch_events(case_dir):
 
+    pf_dir = os.path.join(case_dir, "artifacts", "prefetch")
+
+    if not os.path.isdir(pf_dir):
+        return []
+
+    events = []
+
+    for filename in os.listdir(pf_dir):
+
+        if not filename.endswith(".jsonl"):
+            continue
+
+        path = os.path.join(pf_dir, filename)
+
+        with open(path, "r", encoding="utf-8") as f:
+
+            for line in f:
+
+                try:
+                    evt = json.loads(line)
+                except:
+                    continue
+
+                ts = evt.get("last_run")
+
+                ts_obj = None
+                if ts:
+                    try:
+                        ts_obj = datetime.fromisoformat(ts)
+                    except:
+                        pass
+
+                events.append({
+
+                    "timestamp": ts,
+                    "sort_ts": ts_obj,
+                    "source": "prefetch",
+                    "description": f"Executable={evt.get('executable')} RunCount={evt.get('run_count')}"
+
+                })
+
+    return events
 def _parse_timestamp(ts: Optional[str]) -> Optional[datetime]:
     """
     Parse ISO timestamps into naive datetime for consistent sorting.
