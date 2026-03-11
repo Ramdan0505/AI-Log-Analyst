@@ -1,6 +1,7 @@
-from prefetch import Prefetch
+from windowsprefetch import Prefetch
 
 pf_path = r"C:\path\to\your\test.pf"
+
 pf = Prefetch(pf_path)
 
 print("TYPE:", type(pf))
