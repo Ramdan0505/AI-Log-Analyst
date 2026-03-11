@@ -5,7 +5,6 @@ from api.prefetch_parser import generate_prefetch_derivatives
 
 from api.evtx_parser import generate_evtx_derivatives
 from api.registry_parser import generate_registry_derivatives
-from api.prefetch_parser import generate_prefetch_derivatives
 from api.embedder import embed_texts
 
 PREFETCH_EXTENSIONS = {".pf"}
