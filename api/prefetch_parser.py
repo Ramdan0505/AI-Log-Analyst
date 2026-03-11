@@ -1,0 +1,140 @@
+# api/prefetch_parser.py
+import os
+import json
+from typing import Dict, Any, Generator, Optional, List
+
+
+def _safe_iso(ts: Any) -> Optional[str]:
+    """
+    Convert a timestamp-like object to a string safely.
+    Works whether the parser returns a datetime or a plain string.
+    """
+    if ts is None:
+        return None
+    try:
+        if hasattr(ts, "isoformat"):
+            return ts.isoformat()
+        return str(ts)
+    except Exception:
+        return None
+
+
+def _extract_full_path(executable_name: Optional[str], referenced_files: List[str]) -> Optional[str]:
+    """
+    Best-effort guess for the executable's full path by looking through
+    referenced files and matching the executable name.
+    """
+    if not executable_name:
+        return None
+
+    exe_upper = executable_name.upper()
+
+    for ref in referenced_files:
+        try:
+            candidate = str(ref).strip()
+        except Exception:
+            continue
+
+        if not candidate:
+            continue
+
+        if candidate.upper().endswith("\\" + exe_upper) or candidate.upper().endswith("/" + exe_upper):
+            return candidate
+
+    return None
+
+
+def iter_prefetch_events(prefetch_path: str) -> Generator[Dict[str, Any], None, None]:
+    """
+    Parse ONE .pf file and yield ONE normalized event dict.
+
+    IMPORTANT:
+    Replace the placeholder parsing block with a real Prefetch parser library.
+    The rest of the code is already structured for your architecture.
+    """
+    base_name = os.path.basename(prefetch_path)
+
+    try:
+        # ---------------------------------------------------------
+        # TODO: Replace this block with your actual prefetch parser
+        # ---------------------------------------------------------
+        #
+        # Example idea:
+        #
+        # from <your_prefetch_library> import Prefetch
+        # pf = Prefetch(prefetch_path)
+        #
+        # executable = pf.executable_name
+        # run_count = pf.run_count
+        # last_run_raw = pf.last_run
+        # referenced_files = pf.files_loaded or []
+        #
+        # last_run = _safe_iso(last_run_raw)
+        # full_path = _extract_full_path(executable, referenced_files)
+        #
+        # yield {
+        #     "source": "prefetch",
+        #     "prefetch_file": base_name,
+        #     "executable": executable,
+        #     "full_path": full_path,
+        #     "run_count": run_count,
+        #     "last_run": last_run,
+        #     "referenced_files_count": len(referenced_files),
+        # }
+        #
+        # ---------------------------------------------------------
+
+        raise NotImplementedError("Prefetch parser library not wired in yet.")
+
+    except Exception:
+        # Safe failure: no crash during ingest
+        return
+
+
+def format_prefetch_event(event: Dict[str, Any]) -> str:
+    """
+    Convert the normalized prefetch event into one line of text.
+    This is what gets indexed and searched semantically.
+    """
+    ts = event.get("last_run") or "UNKNOWN_TIME"
+    exe = event.get("executable") or "UNKNOWN_EXE"
+    path = event.get("full_path") or ""
+    run_count = event.get("run_count")
+    pf = event.get("prefetch_file") or ""
+    refs = event.get("referenced_files_count")
+
+    return (
+        f"[{ts}] SOURCE=prefetch Executable={exe} "
+        f"Path={path} RunCount={run_count} "
+        f"ReferencedFiles={refs} PrefetchFile={pf}"
+    ).strip()
+
+
+def generate_prefetch_derivatives(prefetch_path: str, case_dir: str) -> Dict[str, Any]:
+    """
+    Write:
+      - artifacts/prefetch/<basename>.jsonl
+      - artifacts/prefetch/<basename>.txt
+    """
+    os.makedirs(case_dir, exist_ok=True)
+
+    base = os.path.splitext(os.path.basename(prefetch_path))[0]
+    out_dir = os.path.join(case_dir, "artifacts", "prefetch")
+    os.makedirs(out_dir, exist_ok=True)
+
+    jsonl_path = os.path.join(out_dir, f"{base}.jsonl")
+    txt_path = os.path.join(out_dir, f"{base}.txt")
+
+    count = 0
+
+    with open(jsonl_path, "w", encoding="utf-8") as jf, open(txt_path, "w", encoding="utf-8") as tf:
+        for evt in iter_prefetch_events(prefetch_path):
+            count += 1
+            jf.write(json.dumps(evt, ensure_ascii=False) + "\n")
+            tf.write(format_prefetch_event(evt) + "\n")
+
+    return {
+        "events_count": count,
+        "jsonl_path": jsonl_path,
+        "txt_path": txt_path,
+    }
