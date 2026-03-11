@@ -2,7 +2,7 @@
 import os
 import json
 from typing import Dict, Any, Generator, Optional, List
-from prefetch import Prefetch
+from windowsprefetch import Prefetch
 
 def _safe_iso(ts: Any) -> Optional[str]:
     """
