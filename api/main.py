@@ -544,3 +544,15 @@ def test_openai():
         return {"status": "ok", "reply": response.choices[0].message.content}
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+@app.get("/cases/{case_id}/process_graph")
+def get_case_process_graph(case_id: str, limit: int = 200):
+    case_dir = Path(ARTIFACT_DIR) / case_id
+    if not case_dir.is_dir():
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    try:
+        graph = build_process_execution_graph(str(case_dir), limit=limit)
+        return {"case_id": case_id, "graph": graph}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
