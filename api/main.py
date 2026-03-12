@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
+from api.process_graph import build_process_execution_graph
 from fastapi import FastAPI, UploadFile, BackgroundTasks, Body, Query
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
