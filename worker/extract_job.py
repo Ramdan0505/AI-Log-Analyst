@@ -137,7 +137,7 @@ def parse_evtx(out_dir):
         return
 
     files_root = os.path.join(out_dir, ARTIFACTS_SUBDIR)
-    summaries_path = os.path.join(out_dir, "evtx_summaries.jsonl")
+    summaries_path = os.path.join(out_dir, "evtx_raw_summaries.jsonl")
     total = 0
 
     for path in Path(files_root).rglob("*.evtx"):
