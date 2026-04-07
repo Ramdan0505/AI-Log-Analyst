@@ -394,7 +394,7 @@ def explain_case_openai(body: Dict[str, Any] = Body(...)):
             continue
 
     suspicious_search_text = "\n\n".join(search_sections)
-    
+
     if client is None:
         return JSONResponse(status_code=500, content={"error": "OPENAI_API_KEY not set"})
 
@@ -443,6 +443,12 @@ CASE ID: {case_id}
 
 ### Triage Findings
 {triage_findings or "(none)"}
+
+### Timeline Events
+{timeline_text or "(none)"}
+
+### Targeted Suspicious Search Hits
+{suspicious_search_text or "(none)"}
 
 ### Top Suspicious Items
 {triage_topn or "(none)"}
