@@ -57,6 +57,7 @@ app.add_middleware(
 DEFAULT_MAX_CHARS = int(os.getenv("EXPLAIN_MAX_CHARS", "12000"))
 DETAIL_LINES_LIMIT = int(os.getenv("CASE_DETAILS_LINES_LIMIT", "200"))
 
+
 def read_limited_text(path: Path, max_chars: int = DEFAULT_MAX_CHARS) -> str:
     """Read up to max_chars from a text file safely."""
     if not path.exists():
@@ -282,7 +283,6 @@ def get_case(case_id: str):
         "ingest": load_json(case_dir / "ingest.json"),
         "triage_findings": load_json(case_dir / "triage_findings.json"),
         "triage_topn": load_json(case_dir / "triage_topn.json"),
-        # UI-safe: return limited lines, plus quick sizes
         "registry_summaries": read_limited_lines(reg_path),
         "evtx_summaries": read_limited_lines(evtx_path),
         "registry_summaries_bytes": reg_path.stat().st_size if reg_path.exists() else 0,
@@ -325,7 +325,6 @@ def reindex_case(case_id: str, background_tasks: BackgroundTasks):
     if not case_dir.is_dir():
         return JSONResponse(status_code=404, content={"error": "Case not found"})
 
-    # Schedule to avoid long HTTP requests/timeouts
     background_tasks.add_task(build_and_index_case_corpus, str(case_dir), case_id)
     return {"case_id": case_id, "indexed_chunks": "scheduled"}
 
@@ -341,10 +340,9 @@ def get_case_timeline(case_id: str, limit: int = 200, descending: bool = True):
         return JSONResponse(status_code=404, content={"error": "Case not found"})
 
     try:
-        events = build_timeline(str(case_dir), limit=limit, descending=descending)  # requires updated timeline.py signature
+        events = build_timeline(str(case_dir), limit=limit, descending=descending)
         return {"case_id": case_id, "events": events}
     except TypeError:
-        # Backward compatibility if build_timeline(case_dir) signature is old
         events = build_timeline(str(case_dir))
         return {"case_id": case_id, "events": events}
     except Exception as e:
@@ -357,19 +355,41 @@ def get_case_timeline(case_id: str, limit: int = 200, descending: bool = True):
 
 @app.post("/explain_case")
 def explain_case_openai(body: Dict[str, Any] = Body(...)):
+    if client is None:
+        return JSONResponse(status_code=500, content={"error": "OPENAI_API_KEY not set"})
 
-        # Add timeline context
+    case_id = body.get("case_id")
+    if not case_id:
+        return JSONResponse(status_code=400, content={"error": "Missing case_id"})
+
+    case_path = Path(ARTIFACT_DIR) / case_id
+    if not case_path.is_dir():
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    def read_text(name: str, limit_chars: Optional[int] = None) -> str:
+        candidates = [case_path / name, case_path / "files" / name]
+        for p in candidates:
+            if p.exists():
+                if limit_chars is None:
+                    try:
+                        return p.read_text(encoding="utf-8", errors="ignore")
+                    except Exception:
+                        continue
+                return read_limited_text(p, max_chars=limit_chars)
+        return ""
+
+    # Timeline evidence
     try:
         timeline_events = build_timeline(str(case_path), limit=25, descending=True)
     except Exception:
         timeline_events = []
 
     timeline_text = "\n".join(
-        f"- {e.get('timestamp')} | {e.get('source')} | EventID={e.get('event_id')} | {e.get('description')}"
+        f"- {e.get('timestamp')} | source={e.get('source')} | EventID={e.get('event_id')} | {e.get('description')}"
         for e in timeline_events[:25]
     )
 
-    # Add a few targeted semantic searches to strengthen evidence
+    # Semantic search evidence
     suspicious_queries = [
         "failed logon",
         "powershell",
@@ -395,37 +415,11 @@ def explain_case_openai(body: Dict[str, Any] = Body(...)):
 
     suspicious_search_text = "\n\n".join(search_sections)
 
-    if client is None:
-        return JSONResponse(status_code=500, content={"error": "OPENAI_API_KEY not set"})
-
-    case_id = body.get("case_id")
-    if not case_id:
-        return JSONResponse(status_code=400, content={"error": "Missing case_id"})
-
-    case_path = Path(ARTIFACT_DIR) / case_id
-    if not case_path.is_dir():
-        return JSONResponse(status_code=404, content={"error": "Case not found"})
-
-    def read_text(name: str, limit_chars: Optional[int] = None) -> str:
-        candidates = [case_path / name, case_path / "files" / name]
-        for p in candidates:
-            if p.exists():
-                if limit_chars is None:
-                    try:
-                        return p.read_text(encoding="utf-8", errors="ignore")
-                    except Exception:
-                        continue
-                return read_limited_text(p, max_chars=limit_chars)
-        return ""
-
     ingest = read_text("ingest.json", limit_chars=4000)
     triage_findings = read_text("triage_findings.json", limit_chars=12000)
     triage_topn = read_text("triage_topn.json", limit_chars=12000)
-
-    # KEY FIX: limit BOTH summaries
     registry_summaries = read_text("registry_summaries.jsonl", limit_chars=DEFAULT_MAX_CHARS)
     evtx_summaries = read_text("evtx_summaries.jsonl", limit_chars=DEFAULT_MAX_CHARS)
-
     playbook = read_text("playbook.md", limit_chars=12000)
     analyst_notes = read_text("Notes/operator_notes.txt", limit_chars=12000)
 
@@ -433,8 +427,7 @@ def explain_case_openai(body: Dict[str, Any] = Body(...)):
 You are a senior DFIR (Digital Forensics and Incident Response) analyst.
 
 Analyze the following forensic case and produce a structured, professional report.
-If some artifacts are missing (no triage findings, no EVTX summaries, etc.),
-be explicit about those data gaps and base your conclusions only on available evidence.
+If some artifacts are missing, be explicit about those data gaps and base your conclusions only on available evidence.
 
 CASE ID: {case_id}
 
@@ -478,6 +471,7 @@ Rules:
 - Base conclusions only on the provided evidence.
 - Do not invent artifacts that are not present.
 - If evidence is weak, say so clearly.
+- If timeline events exist, use them as evidence even when evtx_summaries.jsonl is sparse.
 - When possible, reference concrete event IDs, commands, services, usernames, IPs, or registry paths.
 """
 
@@ -515,7 +509,6 @@ def worker_done(body: dict = Body(...), background_tasks: BackgroundTasks = None
     if not case_dir.is_dir():
         return JSONResponse(status_code=404, content={"error": "Case folder not found"})
 
-    # Schedule indexing; return fast so worker doesn't time out
     if background_tasks is not None:
         background_tasks.add_task(build_and_index_case_corpus, str(case_dir), case_id)
 
@@ -594,6 +587,7 @@ def test_openai():
         return {"status": "ok", "reply": response.choices[0].message.content}
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
 
 @app.get("/cases/{case_id}/process_graph")
 def get_case_process_graph(case_id: str, limit: int = 200):
