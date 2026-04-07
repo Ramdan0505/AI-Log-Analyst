@@ -357,6 +357,44 @@ def get_case_timeline(case_id: str, limit: int = 200, descending: bool = True):
 
 @app.post("/explain_case")
 def explain_case_openai(body: Dict[str, Any] = Body(...)):
+
+        # Add timeline context
+    try:
+        timeline_events = build_timeline(str(case_path), limit=25, descending=True)
+    except Exception:
+        timeline_events = []
+
+    timeline_text = "\n".join(
+        f"- {e.get('timestamp')} | {e.get('source')} | EventID={e.get('event_id')} | {e.get('description')}"
+        for e in timeline_events[:25]
+    )
+
+    # Add a few targeted semantic searches to strengthen evidence
+    suspicious_queries = [
+        "failed logon",
+        "powershell",
+        "service installed",
+        "scheduled task",
+        "registry persistence",
+        "process creation",
+    ]
+
+    search_sections = []
+    for q in suspicious_queries:
+        try:
+            res = semantic_search(case_id, q, top_k=3)
+            hits = res.get("results", [])
+            if hits:
+                joined = "\n".join(
+                    f"  - dist={round(h.get('distance', 0), 4)} text={h.get('text', '')[:300]}"
+                    for h in hits
+                )
+                search_sections.append(f"Query: {q}\n{joined}")
+        except Exception:
+            continue
+
+    suspicious_search_text = "\n\n".join(search_sections)
+    
     if client is None:
         return JSONResponse(status_code=500, content={"error": "OPENAI_API_KEY not set"})
 
