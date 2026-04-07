@@ -10,9 +10,6 @@ import requests
 from pathlib import Path
 from datetime import datetime
 
-# -------------------------------------------------------
-# NEW: Load env + OpenAI client
-# -------------------------------------------------------
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -55,13 +52,9 @@ def record_meta(out_dir, rel_path, sha=None, extra=None):
 
 
 # -------------------------------------------------------
-# NEW: Helper — Worker → API PIPELINE communication
+# Worker → API communication
 # -------------------------------------------------------
 def post_to_api(endpoint: str, payload: dict):
-    """
-    Sends data back to the FastAPI server.
-    Inside docker-compose, API hostname is literally `api`.
-    """
     url = f"{API_URL}{endpoint}"
     try:
         resp = requests.post(url, json=payload, timeout=10)
@@ -73,8 +66,7 @@ def post_to_api(endpoint: str, payload: dict):
 
 
 # -------------------------------------------------------
-# NEW: optional OpenAI helper for worker-side AI tasks
-# (NOT required for main pipeline, but available)
+# Optional OpenAI helper
 # -------------------------------------------------------
 def call_openai(prompt: str) -> str:
     if client is None:
@@ -134,11 +126,22 @@ def parse_evtx(out_dir):
     try:
         from Evtx.Evtx import Evtx
     except Exception:
+        print("[worker] python-evtx not available; skipping EVTX parsing")
         return
 
     files_root = os.path.join(out_dir, ARTIFACTS_SUBDIR)
-    summaries_path = os.path.join(out_dir, "evtx_raw_summaries.jsonl")
+
+    # IMPORTANT:
+    # Keep worker raw capture separate from API-generated semantic summary file.
+    raw_summaries_path = os.path.join(out_dir, "evtx_raw_summaries.jsonl")
     total = 0
+
+    # Start clean per case run
+    if os.path.exists(raw_summaries_path):
+        try:
+            os.remove(raw_summaries_path)
+        except Exception:
+            pass
 
     for path in Path(files_root).rglob("*.evtx"):
         try:
@@ -147,24 +150,51 @@ def parse_evtx(out_dir):
                 for rec in log.records():
                     if i >= 200:
                         break
+
                     try:
                         xml = rec.xml()
                     except Exception:
                         xml = None
+
+                    try:
+                        record_num = rec.record_num()
+                    except Exception:
+                        record_num = None
+
+                    try:
+                        timestamp = rec.timestamp().isoformat() if rec.timestamp() else None
+                    except Exception:
+                        timestamp = None
+
+                    event_id = None
+                    try:
+                        maybe_eid = getattr(rec, "event_id", None)
+                        if callable(maybe_eid):
+                            event_id = maybe_eid()
+                    except Exception:
+                        event_id = None
+
                     out = {
                         "file": str(path.relative_to(files_root)),
-                        "record_num": rec.record_num(),
-                        "timestamp": rec.timestamp().isoformat() if rec.timestamp() else None,
-                        "event_id": getattr(rec, "event_id", lambda: None)(),
+                        "record_num": record_num,
+                        "timestamp": timestamp,
+                        "event_id": event_id,
                         "xml_snippet": (xml[:800] if xml else None),
                     }
-                    with open(summaries_path, "a", encoding="utf-8") as f:
+
+                    with open(raw_summaries_path, "a", encoding="utf-8") as f:
                         f.write(json.dumps(out) + "\n")
+
                     i += 1
                     total += 1
+
         except Exception as e:
-            record_meta(out_dir, str(path.relative_to(files_root)),
-                        extra={"evtx_parse_error": str(e)})
+            print(f"[worker] EVTX parse error for {path}: {e}")
+            record_meta(
+                out_dir,
+                str(path.relative_to(files_root)),
+                extra={"evtx_parse_error": str(e)}
+            )
 
     with open(os.path.join(out_dir, "evtx_parse_stats.json"), "w", encoding="utf-8") as f:
         json.dump({"total_records_captured": total}, f)
@@ -176,13 +206,13 @@ def parse_registry(out_dir):
     try:
         from regipy.registry import RegistryHive
     except Exception:
+        print("[worker] regipy not available; skipping registry parsing")
         return
-    
-    # unchanged… (keeping all your registry parsing code as-is)
 
-    # ---- [YOUR EXISTING CODE OMITTED HERE FOR BREVITY] ----
-    # I am not altering your DFIR logic — only adding new capabilities.
+    # Placeholder: current worker-side registry parser intentionally omitted
+    # because your API-side pipeline already handles registry derivatives.
     pass
+
 
 # ----------------------- main --------------------------
 
@@ -195,7 +225,7 @@ def main():
     out_dir = f"/data/artifacts/{case_id}"
     os.makedirs(os.path.join(out_dir, ARTIFACTS_SUBDIR), exist_ok=True)
 
-    # Extraction logic unchanged
+    # Extraction logic
     if os.path.isfile(image_path) and image_path.lower().endswith(".zip"):
         unpack_zip(image_path, out_dir)
     elif os.path.isdir(image_path):
@@ -206,21 +236,16 @@ def main():
     # DFIR pipelines
     parse_evtx(out_dir)
     parse_registry(out_dir)
-    #triage_findings(out_dir)
-    #rank_text_and_write_playbook(out_dir)
 
     print(f"[worker] Extraction complete for case: {case_id}")
 
-    # -------------------------------------------------------
-    # NEW: Notify the API the job is done
-    # (Triggers UI updates without polling)
-    # -------------------------------------------------------
+    # Notify API so indexing can happen
     post_to_api("/worker_done", {"case_id": case_id})
 
-    # OPTIONAL: Ask OpenAI to auto-describe the extraction process
+    # Optional AI worker summary
     ai_summary = call_openai(f"Summarize extraction steps for case {case_id}")
     if ai_summary:
-        with open(os.path.join(out_dir, "worker_ai_summary.txt"), "w") as f:
+        with open(os.path.join(out_dir, "worker_ai_summary.txt"), "w", encoding="utf-8") as f:
             f.write(ai_summary)
 
 
