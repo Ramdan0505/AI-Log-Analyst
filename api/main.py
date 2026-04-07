@@ -473,6 +473,12 @@ Your report MUST include:
 - Narrative Timeline of Activity
 - Recommended Next Steps for Investigators
 - Confidence Level and Any Data Gaps
+
+Rules:
+- Base conclusions only on the provided evidence.
+- Do not invent artifacts that are not present.
+- If evidence is weak, say so clearly.
+- When possible, reference concrete event IDs, commands, services, usernames, IPs, or registry paths.
 """
 
     try:
